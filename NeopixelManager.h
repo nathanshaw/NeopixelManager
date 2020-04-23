@@ -45,10 +45,6 @@
 #define FLASH_DEBOUNCE_TIME 50
 #endif
 
-#ifndef FLASH_DOMINATES
-#define FLASH_DOMINATES 0
-#endif
-
 #ifndef PRINT_LUX_DEBUG 
 #define PRINT_LUX_DEBUG 0
 #endif
@@ -63,6 +59,18 @@
 
 #ifndef MAX_BRIGHTNESS
 #define MAX_BRIGHTNESS 255
+#endif
+
+#ifndef STANDARD
+#define STANDARD 0
+#endif
+
+#ifndef BOTTOM_UP 
+#define BOTTOM_UP 1
+#endif
+
+#ifndef ROUND
+#define ROUND 2
 #endif
 
 
@@ -93,6 +101,7 @@ class NeoGroup {
   public:
     NeoGroup(WS2812Serial *neos, int start_idx, int end_idx, String _id, uint32_t f_min, uint32_t f_max);
     NeoGroup(WS2812Serial *neos, int start_idx, int end_idx, String _id);
+    void setFlashBehaviour(bool f){flash_dominates = f;};
 
     /////////////////////////////// Datatracking /////////////////////////////
     double red_avg, green_avg, blue_avg;
@@ -142,12 +151,17 @@ class NeoGroup {
     void colorWipeAdd(uint8_t red, uint8_t green, uint8_t blue);
     void colorWipeAdd(uint8_t red, uint8_t green, uint8_t blue, double bs);
 
+    void changeMapping(uint8_t m){mapping = m;};
+
     //////////////////////////////// Flashes //////////////////////////////////
     bool flashOn(uint8_t red, uint8_t green, uint8_t blue); // perhaps add time for flash to flashOn
     bool flashOn();
     void flashOff();
     void update();
+
     void setFlashColors(uint8_t red, uint8_t green, uint8_t blue);
+    void setSongColors(uint8_t red, uint8_t green, uint8_t blue);
+
     void powerOn(); // force a power on, overriding any shdn_timer
 
     /////////////////////////////// Printing /////////////////////////////////
@@ -162,6 +176,8 @@ class NeoGroup {
     bool getLuxShdn() { return extreme_lux_shdn;};
 
   private:
+    bool flash_dominates = false;
+    uint8_t mapping = ROUND;
     double hsb[3]; // limited from 0 - 255
     uint8_t rgb[3]; // limited from 0.0 - 1.0
     double hue2rgb(double p, double q, double t);
@@ -174,6 +190,11 @@ class NeoGroup {
     uint8_t flash_red = 0;
     uint8_t flash_green = 0;
     uint8_t flash_blue = 255;
+    // max values for the click used for some mappings
+    uint8_t song_red = 0;
+    uint8_t song_green = 0;
+    uint8_t song_blue = 0;
+
     long remaining_flash_delay = 0;// negative values expected, can not be a variable
     bool flash_on = false;
     long flash_min_time;  // how long is the shortest flash?
@@ -288,6 +309,12 @@ void NeoGroup::setFlashColors(uint8_t red, uint8_t green, uint8_t blue) {
   flash_red = red;
   flash_green = green;
   flash_blue = blue;
+}
+
+void NeoGroup::setSongColors(uint8_t red, uint8_t green, uint8_t blue) {
+  song_red = red;
+  song_green = green;
+  song_blue = blue;
 }
 
 void NeoGroup::updateHSB(double h, double s, double b) {
@@ -454,7 +481,7 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bs) {
 
   if (flash_on == true) {
       // if the flash is on then add the flash colors to the color wipe colors
-      if (FLASH_DOMINATES == false) {
+      if (flash_dominates == false) {
           dprintln(PRINT_COLOR_WIPE_DEBUG, " Flash blocked colorWipe");
           red += flash_red;
           green += flash_green;
@@ -476,12 +503,146 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bs) {
   dprint(PRINT_COLOR_WIPE_DEBUG, num_pixels); 
   dprint(PRINT_COLOR_WIPE_DEBUG, " - ");
 
-  for (int i = 0; i < num_pixels; i++) {
-      leds->setPixel(idx_start + i, colors);
-      dprint(PRINT_COLOR_WIPE_DEBUG, idx_start+i);
-      dprint(PRINT_COLOR_WIPE_DEBUG, ": ");
-      dprint(PRINT_COLOR_WIPE_DEBUG, colors); 
-      dprint(PRINT_COLOR_WIPE_DEBUG, "\t");
+  if (mapping == STANDARD) {
+      for (int i = 0; i < num_pixels; i++) {
+          leds->setPixel(idx_start + i, colors);
+          dprint(PRINT_COLOR_WIPE_DEBUG, idx_start+i);
+          dprint(PRINT_COLOR_WIPE_DEBUG, ": ");
+          dprint(PRINT_COLOR_WIPE_DEBUG, colors); 
+          dprint(PRINT_COLOR_WIPE_DEBUG, "\t");
+      }
+  } else if (mapping == ROUND) {
+      // TODO this logic is broken for when a flash is happening
+      red = red * num_pixels;
+      green = green * num_pixels;
+      blue = blue * num_pixels;
+      for (int i = 0; i < num_pixels; i++) {
+          // if we have more than the max then just add the max to the target
+          uint8_t _red, _green, _blue;
+          if (red > song_red) {
+              _red = song_red;
+          } else {
+              // otherwise use up what is left
+              _green = green;
+          }
+          if (green > song_green) {
+              _green = song_green;
+          } else {
+              // otherwise use up what is left
+              _green = red;
+          }
+          if (blue > song_blue) {
+              _blue = song_blue;
+          } else {
+              // otherwise use up what is left
+              _blue = blue;
+          }
+          red = red - _red;
+          green = green - _green;
+          blue = blue - _blue;
+          int _colors = packColors(_red, _green, _blue, brightness_scaler);
+          leds->setPixel(idx_start + i, _colors);
+      }
+  }
+  else if (mapping == BOTTOM_UP) {
+      // groups are pixe
+      // g3      4   3         8
+      // g2     5     2     7     9
+      // g1        1         6  10
+      int g1[3] = {1, 6, 10};
+      uint8_t g1_colors[3];
+      int g2[4] = {5, 2, 7, 9};
+      uint8_t g2_colors[3];
+      int g3[3] = {4, 3, 8};
+      uint8_t g3_colors[3];
+      // add all the energy for each colour together
+      red = red * num_pixels;
+      green = green * num_pixels;
+      blue = blue * num_pixels;
+      ////////////////////// Red //////////////////////////
+      // then start with g1 by filling them up to their max
+      if (red > song_red * 3) {
+          g1_colors[0] = song_red;
+          red = red - (3 * song_red);
+      } else {
+          g1_colors[0] = red / 3;
+          red = 0;
+      }
+      // next move on to g2
+      if (red > song_red * 4) {
+          g2_colors[0] = song_red;
+          red = red - (4 * song_red);
+      } else {
+          g2_colors[0] = red / 4;
+          red = 0;
+      }
+      // and then finally g3 
+      if (red > song_red * 3) {
+          g3_colors[0] = song_red;
+          red = red - (3 * song_red);
+      } else {
+          g3_colors[0] = red / 3;
+          red = 0;
+      }
+      //////////////////////// Green ///////////////////////
+      // then start with g1 by filling them up to their max
+      if (green > song_green * 3) {
+          g1_colors[1] = song_green ;
+          green = green - (3 * song_green);
+      } else {
+          g1_colors[1] = green / 3;
+          green = 0;
+      }
+      // next move on to g2
+      if (green > song_green * 4) {
+          g2_colors[1] = song_green;
+          green = green - (4 * song_green);
+      } else {
+          g2_colors[1] = green / 4;
+          green = 0;
+      }
+      // and then finally g3 
+      if (green > song_green * 3) {
+          g3_colors[1] = song_green;
+          green = green - (3 * song_green);
+      } else {
+          g3_colors[1] = green / 3;
+          green = 0;
+      }
+
+      ////////////////////// Blue //////////////////////////
+      // then start with g1 by filling them up to their max
+      if (blue > song_blue* 3) {
+          g1_colors[0] = song_blue;
+          blue = blue - (3 * song_blue);
+      } else {
+          g1_colors[0] = blue / 3;
+          blue = 0;
+      }
+      // next move on to g2
+      if (blue > song_blue * 4) {
+          g2_colors[0] = song_blue;
+          blue = blue - (4 * song_blue);
+      } else {
+          g2_colors[0] = blue / 4;
+          blue = 0;
+      }
+      // and then finally g3 
+      if (blue > song_blue * 3) {
+          g3_colors[0] = song_blue;
+          blue = blue - (3 * song_blue);
+      } else {
+          g3_colors[0] = blue / 3;
+          blue = 0;
+      }
+      // now that we know what the colors should be for each group, we can now set the LEDs to that color
+      for (int i = 0; i < 3; i++){
+          leds->setPixel(g1[i], g1_colors[0], g1_colors[1], g1_colors[2]);
+          leds->setPixel(g2[i], g2_colors[0], g2_colors[1], g2_colors[2]);
+          leds->setPixel(g3[i], g3_colors[0], g3_colors[1], g3_colors[2]);
+      }
+      // g2 has an extra pixel =P
+      leds->setPixel(g2[3], g2_colors[0], g2_colors[1], g2_colors[2]);
   }
   leds->show();
   dprint(PRINT_COLOR_WIPE_DEBUG, " finished updating the neopixels");
