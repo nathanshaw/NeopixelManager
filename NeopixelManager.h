@@ -29,8 +29,8 @@
 #define PRINT_CLICK_DEBUG 0
 #endif
 
-#ifndef PRINT_LED_DEBUG 
-#define PRINT_LED_DEBUG 0
+#ifndef PRINT_ON_RATIO_DEBUG 
+#define PRINT_ON_RATIO_DEBUG 0
 #endif
 
 #ifndef PRINT_LED_ON_RATIO_DEBUG
@@ -177,7 +177,7 @@ class NeoGroup {
 
   private:
     bool flash_dominates = false;
-    uint8_t mapping = ROUND;
+    uint8_t mapping = STANDARD;
     double hsb[3]; // limited from 0 - 255
     uint8_t rgb[3]; // limited from 0.0 - 1.0
     double hue2rgb(double p, double q, double t);
@@ -440,7 +440,7 @@ void NeoGroup::updateColorLog(uint8_t red, uint8_t green, uint8_t blue) {
 
   // for each ms this value has been present add the value of the last color
   //  to the running total
-  for (int i = 0; i < on_off_len; i++) {
+  for (uint16_t i = 0; i < on_off_len; i++) {
       red_tot += rgb[0];
       green_tot += rgb[1];
       blue_tot += rgb[2];
@@ -792,7 +792,7 @@ void NeoGroup::resetOnOffRatioCounters() {
   on_ratio = (double)on_time / (double)(on_time + off_time);
   on_time = 0;
   off_time = 0;
-  dprintln(PRINT_LED_DEBUG, "reset the led on/off ratio counters");
+  dprintln(PRINT_ON_RATIO_DEBUG, "reset the led on/off ratio counters");
 }
 
 // mode 0 is just front, mode 1 is just rear, mode 2 is both (using combined values?), mode 3 is both using independent values
