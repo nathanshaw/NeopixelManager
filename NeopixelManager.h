@@ -518,7 +518,9 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bs) {
       blue = blue * num_pixels;
       for (int i = 0; i < num_pixels; i++) {
           // if we have more than the max then just add the max to the target
-          uint8_t _red, _green, _blue;
+          uint8_t _red = 0;
+          uint8_t _green = 0;
+          uint8_t _blue = 0;
           if (red > song_red) {
               _red = song_red;
           } else {
