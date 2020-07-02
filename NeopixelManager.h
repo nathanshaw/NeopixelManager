@@ -61,16 +61,20 @@
 #define MAX_BRIGHTNESS 255
 #endif
 
-#ifndef STANDARD
-#define STANDARD 0
+#ifndef LED_MAPPING_STANDARD
+#define LED_MAPPING_STANDARD 0
 #endif
 
-#ifndef BOTTOM_UP 
-#define BOTTOM_UP 1
+#ifndef LED_MAPPING_BOTTOM_UP 
+#define LED_MAPPING_BOTTOM_UP 1
 #endif
 
-#ifndef ROUND
-#define ROUND 2
+#ifndef LED_MAPPING_ROUND
+#define LED_MAPPING_ROUND 2
+#endif
+
+#ifndef LED_MAPPING_CENTER_OUT
+#define LED_MAPPING_CENTER_OUT 3
 #endif
 
 
@@ -144,8 +148,8 @@ class NeoGroup {
     double getBright(){return hsb[2];};
 
     //////////////////////////////// ColorWipes ///////////////////////////////
-    void colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bs);
-    void colorWipe(uint8_t red, uint8_t green, uint8_t blue);
+    void colorWipe(uint8_t red, uint8_t green, uint8_t blue, double brightness, double bs);
+    void colorWipe(uint8_t red, uint8_t green, uint8_t blue, double brightness);
     void colorWipe(int colors);
     void colorWipeHSB(double h, double s, double b);
     void colorWipeAdd(uint8_t red, uint8_t green, uint8_t blue);
@@ -177,7 +181,7 @@ class NeoGroup {
 
   private:
     bool flash_dominates = false;
-    uint8_t mapping = STANDARD;
+    uint8_t mapping = LED_MAPPING_STANDARD;
     double hsb[3]; // limited from 0 - 255
     uint8_t rgb[3]; // limited from 0.0 - 1.0
     double hue2rgb(double p, double q, double t);
@@ -272,7 +276,7 @@ bool NeoGroup::shutdown(uint32_t len) {
     dprint(PRINT_LUX_DEBUG,millis());dprint(PRINT_LUX_DEBUG, "\tSHUTTING DOWN GROUP ");
     dprintln(PRINT_LUX_DEBUG, id);
     shdn_len = len;
-    colorWipe(0, 0, 0);
+    colorWipe(0, 0, 0, 0.0);
     shdn_timer = 0;
     leds_on = false;
     return 0;
@@ -408,7 +412,8 @@ void NeoGroup::resetRGBAverageTracker() {
 void NeoGroup::colorWipeHSB(double h, double s, double b) {
   updateHSB(h, s, b);
   HsbToRgb(h, s, b);
-  colorWipe(rgb[0], rgb[1], rgb[2]);
+  // TODO calculate brightness properly
+  colorWipe(rgb[0], rgb[1], rgb[2], 1.0);
 }
 
 void NeoGroup::colorWipeAdd(uint8_t red, uint8_t green, uint8_t blue, double bs) {
@@ -432,8 +437,8 @@ void NeoGroup::colorWipeAdd(uint8_t red, uint8_t green, uint8_t blue) {
   colorWipe(red, green, blue, brightness_scaler);
 }
 
-void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue) {
-  colorWipe(red, green, blue, brightness_scaler);
+void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double brightness) {
+  colorWipe(red, green, blue, brightness, brightness_scaler);
 }
 
 void NeoGroup::updateColorLog(uint8_t red, uint8_t green, uint8_t blue) {
@@ -465,7 +470,7 @@ void NeoGroup::updateColorLog(uint8_t red, uint8_t green, uint8_t blue) {
   }
 }
 
-void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bs) {
+void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double brightness, double bs) {
   // TODO this logic is broken...
   if (extreme_lux_shdn == true) {
     dprintln(PRINT_COLOR_WIPE_DEBUG, " colorWipe returning due extreme lux conditions");
@@ -503,7 +508,7 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bs) {
   dprint(PRINT_COLOR_WIPE_DEBUG, num_pixels); 
   dprint(PRINT_COLOR_WIPE_DEBUG, " - ");
 
-  if (mapping == STANDARD) {
+  if (mapping == LED_MAPPING_STANDARD) {
       for (int i = 0; i < num_pixels; i++) {
           leds->setPixel(idx_start + i, colors);
           dprint(PRINT_COLOR_WIPE_DEBUG, idx_start+i);
@@ -511,7 +516,7 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bs) {
           dprint(PRINT_COLOR_WIPE_DEBUG, colors); 
           dprint(PRINT_COLOR_WIPE_DEBUG, "\t");
       }
-  } else if (mapping == ROUND) {
+  } else if (mapping == LED_MAPPING_ROUND) {
       // TODO this logic is broken for when a flash is happening
       red = red * num_pixels;
       green = green * num_pixels;
@@ -546,7 +551,72 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bs) {
           leds->setPixel(idx_start + i, _colors);
       }
   }
-  else if (mapping == BOTTOM_UP) {
+  else if (mapping == LED_MAPPING_CENTER_OUT) {
+      // center ring front: 16, 17, 18, 19
+      // center ring rear: 36, 37, 38, 39
+      // middle ring front: 10, 11, 12, 13, 14, 15
+      // middle ring rear: 30, 31, 32, 33, 34, 35
+      // outer ring front 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+      // outer ring rear: 20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+      uint16_t center_rings[8] = {16, 17, 18, 19, 36, 37, 38, 39};
+      uint16_t middle_rings[12] = {10, 11, 12, 13, 14, 15, 30, 31, 32, 33, 34, 35};
+      uint16_t outer_rings[20] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29};
+      double center_ring_weight = 0.2;
+      double middle_ring_weight = 0.3;
+      double outer_ring_weight = 0.5;
+      // loop for the center rings
+      Serial.println(brightness);
+      
+      ///////////////////////////////////////////////////////////////////////////////////
+      //////////////////////////// CENTER RING //////////////////////////////////////////
+      ///////////////////////////////////////////////////////////////////////////////////
+      // temp rgb values for if we need to present a scaledd display for the center ring
+      uint8_t _red = brightness * 5 * red;
+      uint8_t _green= brightness * 5 * green;
+      uint8_t _blue = brightness * 5 * blue;
+      for (int i = 0; i < 8; i++) {
+          // if the brightness is greater than 51 then all the LEDS should be 
+          // at max brightness for the center rings
+          if (brightness > center_ring_weight) {
+            leds->setPixel(center_rings[i], red, green, blue);
+          } else {
+            leds->setPixel(center_rings[i], _red, _green , _blue);
+          }
+      }
+      ///////////////////////////////////////////////////////////////////////////////////
+      //////////////////////////// MIDDLE RING //////////////////////////////////////////
+      ///////////////////////////////////////////////////////////////////////////////////
+      // temp rgb values for if we need to present a scaledd display for the center ring
+      _red = (brightness - center_ring_weight) * 3.3333333333 * red;
+      _green= (brightness - center_ring_weight) * 3.3333333333 * green;
+      _blue =  (brightness - center_ring_weight) * 3.3333333333 * blue;
+      for (int i = 0; i < 12; i++) {
+          // if the brightness is greater than 51 then all the LEDS should be 
+          // at max brightness for the center rings
+          if (brightness > center_ring_weight) {
+            leds->setPixel(middle_rings[i], red, green, blue);
+          } else {
+            leds->setPixel(middle_rings[i], _red, _green , _blue);
+          }
+      }
+      ///////////////////////////////////////////////////////////////////////////////////
+      //////////////////////////// OUTER RING //////////////////////////////////////////
+      ///////////////////////////////////////////////////////////////////////////////////
+      // temp rgb values for if we need to present a scaledd display for the center ring
+      _red = (brightness - center_ring_weight - middle_ring_weight) * 2 * red;
+      _green= (brightness - center_ring_weight - middle_ring_weight) * 2 * green;
+      _blue =  (brightness - center_ring_weight - middle_ring_weight) * 2 * blue;
+      for (int i = 0; i < 20; i++) {
+          // if the brightness is greater than 51 then all the LEDS should be 
+          // at max brightness for the center rings
+          if (brightness > 254) {
+            leds->setPixel(outer_rings[i], red, green, blue);
+          } else {
+            leds->setPixel(outer_rings[i], _red, _green , _blue);
+          }
+      }
+  }
+  else if (mapping == LED_MAPPING_BOTTOM_UP) {
       // groups are pixe
       // g3      4   3         8
       // g2     5     2     7     9
@@ -692,7 +762,7 @@ void NeoGroup::flashOff() {
     dprintln(PRINT_CLICK_DEBUG, last_flash);
     flash_on = false;
     leds_on = false;
-    colorWipe(0, 0, 0);
+    colorWipe(0, 0, 0, 0.0);
     remaining_flash_delay = 0;
     // last_flash = 0;
   }
