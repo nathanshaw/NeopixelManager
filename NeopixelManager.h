@@ -25,28 +25,28 @@
 #include "../Macros.h"
 #include <PrintUtils.h>
 
-#ifndef PRINT_CLICK_DEBUG
-#define PRINT_CLICK_DEBUG 0
+#ifndef P_CLICK_DEBUG
+#define P_CLICK_DEBUG 0
 #endif
 
-#ifndef PRINT_ON_RATIO_DEBUG 
-#define PRINT_ON_RATIO_DEBUG 0
+#ifndef P_ON_RATIO_DEBUG 
+#define P_ON_RATIO_DEBUG 0
 #endif
 
-#ifndef PRINT_LED_ON_RATIO_DEBUG
-#define PRINT_LED_ON_RATIO_DEBUG 0
+#ifndef P_LED_ON_RATIO_DEBUG
+#define P_LED_ON_RATIO_DEBUG 0
 #endif
 
-#ifndef PRINT_COLOR_WIPE_DEBUG
-#define PRINT_COLOR_WIPE_DEBUG 0
+#ifndef P_COLOR_WIPE_DEBUG
+#define P_COLOR_WIPE_DEBUG 0
 #endif
 
 #ifndef FLASH_DEBOUNCE_TIME
 #define FLASH_DEBOUNCE_TIME 50
 #endif
 
-#ifndef PRINT_LUX_DEBUG 
-#define PRINT_LUX_DEBUG 0
+#ifndef P_LUX_DEBUG 
+#define P_LUX_DEBUG 0
 #endif
 
 #ifndef UPDATE_ON_OFF_RATIOS 
@@ -140,6 +140,10 @@ class NeoGroup {
     double getAvgBrightnessScaler();
     double getAvgBrightness(String type);
     long getRemainingFlashDelay() {return remaining_flash_delay;};
+
+    void updateUserBrightnessScaler(double b) {
+        user_brightness_overide = true;
+        user_brightness_scaler = b;};
 
     ///////////////////////////////// HSB Colors //////////////////////////////
     void updateHSB(double h, double s, double b);
@@ -236,8 +240,12 @@ class NeoGroup {
     double brightness_scaler = 1.0;
     double brightness_scaler_total;
     double brightness_scaler_changes;
-    void updateBrightnessScalerTotals();
-    void resetOnOffRatioCounters();
+    void   updateBrightnessScalerTotals();
+    void   resetOnOffRatioCounters();
+
+    /////////////////////// User Brightness Scaler //////////////////////
+    double user_brightness_overide = true;
+    double user_brightness_scaler = 1.0;
 };
 
 void NeoGroup::resetFPM() {
@@ -273,8 +281,8 @@ NeoGroup::NeoGroup(WS2812Serial *neos, int start_idx, int end_idx, String _id, u
 bool NeoGroup::shutdown(uint32_t len) {
   // return 0 if lux shutdown not a success, 1 if it is
   if (!isInShutdown()) {
-    dprint(PRINT_LUX_DEBUG,millis());dprint(PRINT_LUX_DEBUG, "\tSHUTTING DOWN GROUP ");
-    dprintln(PRINT_LUX_DEBUG, id);
+    dprint(P_LUX_DEBUG,millis());dprint(P_LUX_DEBUG, "\tSHUTTING DOWN GROUP ");
+    dprintln(P_LUX_DEBUG, id);
     shdn_len = len;
     colorWipe(0, 0, 0, 0.0);
     shdn_timer = 0;
@@ -297,7 +305,7 @@ void NeoGroup::printColors() {
 }
 
 void NeoGroup::powerOn() {
-  dprintln(PRINT_LUX_DEBUG, "POWER ON MESSAGE RECEIVED");
+  dprintln(P_LUX_DEBUG, "POWER ON MESSAGE RECEIVED");
   shdn_timer += shdn_len;
 }
 
@@ -473,48 +481,54 @@ void NeoGroup::updateColorLog(uint8_t red, uint8_t green, uint8_t blue) {
 void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double brightness, double bs) {
   // TODO this logic is broken...
   if (extreme_lux_shdn == true) {
-    dprintln(PRINT_COLOR_WIPE_DEBUG, " colorWipe returning due extreme lux conditions");
+    dprintln(P_COLOR_WIPE_DEBUG, " colorWipe returning due extreme lux conditions");
     return;
   }
   if (shdn_timer < shdn_len) {
     // if the LEDs are in shutdown mode than simply exit without changing the LEDs
-    dprint(PRINT_COLOR_WIPE_DEBUG, " colorWipe returning due to shdn_timer : "); 
-    dprintln(PRINT_COLOR_WIPE_DEBUG, shdn_timer);
+    dprint(P_COLOR_WIPE_DEBUG, " colorWipe returning due to shdn_timer : "); 
+    dprintln(P_COLOR_WIPE_DEBUG, shdn_timer);
     updateColorLog(0, 0, 0);
     return;
   }
 
+  /////////////////////////////////////////////////////////////////////////////
   if (flash_on == true) {
       // if the flash is on then add the flash colors to the color wipe colors
       if (flash_dominates == false) {
-          dprintln(PRINT_COLOR_WIPE_DEBUG, " Flash blocked colorWipe");
+          dprintln(P_COLOR_WIPE_DEBUG, " Flash blocked colorWipe");
           red += flash_red;
           green += flash_green;
           blue += flash_blue;
       }
       else {
-          dprintln(PRINT_COLOR_WIPE_DEBUG, " Flash blocked colorWipe");
+          dprintln(P_COLOR_WIPE_DEBUG, " Flash blocked colorWipe");
           red += flash_red;
           green += flash_green;
           blue += flash_blue;
       }
   }
-
+  //////////////////////////////////////////////////////////////////////////////
+  // packColors will take the red, green and blue values (0 - 255) and
+  // scale them according the brightness scaler
+  if (user_brightness_overide == true) {
+    bs = bs * user_brightness_scaler;
+  }
   int colors = packColors(red, green, blue, bs);
-
-  dprint(PRINT_COLOR_WIPE_DEBUG, id);
-  dprint(PRINT_COLOR_WIPE_DEBUG, " Starting colorWipe in NeoGroup - ");
-  dprint(PRINT_COLOR_WIPE_DEBUG, " num_pixels: ");
-  dprint(PRINT_COLOR_WIPE_DEBUG, num_pixels); 
-  dprint(PRINT_COLOR_WIPE_DEBUG, " - ");
+  //////////////////////////////////////////////////////////////////////////////
+  dprint(P_COLOR_WIPE_DEBUG, id);
+  dprint(P_COLOR_WIPE_DEBUG, " Starting colorWipe in NeoGroup - ");
+  dprint(P_COLOR_WIPE_DEBUG, " num_pixels: ");
+  dprint(P_COLOR_WIPE_DEBUG, num_pixels); 
+  dprint(P_COLOR_WIPE_DEBUG, " - ");
 
   if (mapping == LED_MAPPING_STANDARD) {
       for (int i = 0; i < num_pixels; i++) {
           leds->setPixel(idx_start + i, colors);
-          dprint(PRINT_COLOR_WIPE_DEBUG, idx_start+i);
-          dprint(PRINT_COLOR_WIPE_DEBUG, ": ");
-          dprint(PRINT_COLOR_WIPE_DEBUG, colors); 
-          dprint(PRINT_COLOR_WIPE_DEBUG, "\t");
+          dprint(P_COLOR_WIPE_DEBUG, idx_start+i);
+          dprint(P_COLOR_WIPE_DEBUG, ": ");
+          dprint(P_COLOR_WIPE_DEBUG, colors); 
+          dprint(P_COLOR_WIPE_DEBUG, "\t");
       }
   } else if (mapping == LED_MAPPING_ROUND) {
       // TODO this logic is broken for when a flash is happening
@@ -563,7 +577,7 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bright
       uint16_t outer_rings[20] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29};
       double center_ring_weight = 0.2;
       double middle_ring_weight = 0.3;
-      double outer_ring_weight = 0.5;
+      // double outer_ring_weight = 0.5;
       // loop for the center rings
       Serial.println(brightness);
       
@@ -717,16 +731,16 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bright
       leds->setPixel(g2[3], g2_colors[0], g2_colors[1], g2_colors[2]);
   }
   leds->show();
-  dprint(PRINT_COLOR_WIPE_DEBUG, " finished updating the neopixels");
+  dprint(P_COLOR_WIPE_DEBUG, " finished updating the neopixels");
 
   // if the LEDs are on set "led_on" to true, otherwise turn "led_on" to false
   // also reset led_off_len if the leds  were just turned off
   if (colors == 0) {
     leds_on = false;
-    dprint(PRINT_COLOR_WIPE_DEBUG, " setting leds_on to false");
+    dprint(P_COLOR_WIPE_DEBUG, " setting leds_on to false");
   } else {
     leds_on = true;
-    dprint(PRINT_COLOR_WIPE_DEBUG, " setting leds_on to true");
+    dprint(P_COLOR_WIPE_DEBUG, " setting leds_on to true");
   }
   updateColorLog(red, green, blue);
 }
@@ -740,7 +754,7 @@ void NeoGroup::colorWipe(int colors) {
   }
   for (int i = 0; i < num_pixels; i++) {
     leds->setPixel(idx_start + i, colors);
-    dprint(PRINT_COLOR_WIPE_DEBUG, idx_start + i); dprintTab(PRINT_COLOR_WIPE_DEBUG);
+    dprint(P_COLOR_WIPE_DEBUG, idx_start + i); dprintTab(P_COLOR_WIPE_DEBUG);
   }
   leds->show();
   // TODO how toa dapt this to new array variables?
@@ -757,9 +771,9 @@ void NeoGroup::colorWipe(int colors) {
 void NeoGroup::flashOff() {
   // if the flash is allowed to be turned off
   if (remaining_flash_delay <= 0) {
-    dprint(PRINT_CLICK_DEBUG, id);
-    dprint(PRINT_CLICK_DEBUG, " FlashOff : ");
-    dprintln(PRINT_CLICK_DEBUG, last_flash);
+    dprint(P_CLICK_DEBUG, id);
+    dprint(P_CLICK_DEBUG, " FlashOff : ");
+    dprintln(P_CLICK_DEBUG, last_flash);
     flash_on = false;
     leds_on = false;
     colorWipe(0, 0, 0, 0.0);
@@ -782,11 +796,11 @@ bool NeoGroup::flashOn(uint8_t red, uint8_t green, uint8_t blue) {
         num_flashes = num_flashes  + 1;
         total_flashes++;
         getFPM();
-        dprint(PRINT_CLICK_DEBUG, id);
-        dprint(PRINT_CLICK_DEBUG, " FLASH ON #");
-        dprint(PRINT_CLICK_DEBUG, num_flashes);
-        dprint(PRINT_CLICK_DEBUG, " Flashed "); dprint(PRINT_CLICK_DEBUG, remaining_flash_delay);
-        dprint(PRINT_CLICK_DEBUG, " FPM "); dprintln(PRINT_CLICK_DEBUG, fpm);
+        dprint(P_CLICK_DEBUG, id);
+        dprint(P_CLICK_DEBUG, " FLASH ON #");
+        dprint(P_CLICK_DEBUG, num_flashes);
+        dprint(P_CLICK_DEBUG, " Flashed "); dprint(P_CLICK_DEBUG, remaining_flash_delay);
+        dprint(P_CLICK_DEBUG, " FPM "); dprintln(P_CLICK_DEBUG, fpm);
       } else { // if a flash is on then increment the remaining_flash_Delay
         addToRemainingFlashDelay(1);
         if (remaining_flash_delay > flash_max_time) {
@@ -796,8 +810,8 @@ bool NeoGroup::flashOn(uint8_t red, uint8_t green, uint8_t blue) {
       return true;
     }
   } else {
-    dprint(PRINT_CLICK_DEBUG, "Flash skipped due to FLASH_DEBOUNCE_TIME : ");
-    dprintln(PRINT_CLICK_DEBUG, last_flash);
+    dprint(P_CLICK_DEBUG, "Flash skipped due to FLASH_DEBOUNCE_TIME : ");
+    dprintln(P_CLICK_DEBUG, last_flash);
   }
   return false;
 }
@@ -813,27 +827,27 @@ void NeoGroup::update() {
   // if there is time remaining in the flash it either needs to be turned
   // on or the timer needs to increment
   if (remaining_flash_delay > 0) {
-    dprintln(PRINT_CLICK_DEBUG, "-------------------------------------");
-    dprint(PRINT_CLICK_DEBUG, "flash delay "); dprint(PRINT_CLICK_DEBUG, id); dprint(PRINT_CLICK_DEBUG, " : ");
-    dprint(PRINT_CLICK_DEBUG, remaining_flash_delay); dprintTab(PRINT_CLICK_DEBUG);
-    dprint(PRINT_CLICK_DEBUG, last_flash_update); dprintTab(PRINT_CLICK_DEBUG);
+    dprintln(P_CLICK_DEBUG, "-------------------------------------");
+    dprint(P_CLICK_DEBUG, "flash delay "); dprint(P_CLICK_DEBUG, id); dprint(P_CLICK_DEBUG, " : ");
+    dprint(P_CLICK_DEBUG, remaining_flash_delay); dprintTab(P_CLICK_DEBUG);
+    dprint(P_CLICK_DEBUG, last_flash_update); dprintTab(P_CLICK_DEBUG);
     // if the flash is not currently on, turn the flash on
     if (flash_on < 1) { //and the light is not currently on
-      dprintln(PRINT_CLICK_DEBUG, "-- Turning the Flash ON --");
+      dprintln(P_CLICK_DEBUG, "-- Turning the Flash ON --");
       flashOn(flash_red, flash_green, flash_blue);// flash on
     }
     // if the flash is already on subtract from the timer
     else {
-      dprintln(PRINT_CLICK_DEBUG, "- - - - - - - - - - - - - - - - - - -");
-      dprint(PRINT_CLICK_DEBUG, "last_flash :\t"); dprintln(PRINT_CLICK_DEBUG, last_flash);
-      dprint(PRINT_CLICK_DEBUG, "remaining_flash_delay "); 
-      dprint(PRINT_CLICK_DEBUG, id); dprint(PRINT_CLICK_DEBUG, ":\t");
-      dprint(PRINT_CLICK_DEBUG, remaining_flash_delay); dprint(PRINT_CLICK_DEBUG, "\t");
+      dprintln(P_CLICK_DEBUG, "- - - - - - - - - - - - - - - - - - -");
+      dprint(P_CLICK_DEBUG, "last_flash :\t"); dprintln(P_CLICK_DEBUG, last_flash);
+      dprint(P_CLICK_DEBUG, "remaining_flash_delay "); 
+      dprint(P_CLICK_DEBUG, id); dprint(P_CLICK_DEBUG, ":\t");
+      dprint(P_CLICK_DEBUG, remaining_flash_delay); dprint(P_CLICK_DEBUG, "\t");
       remaining_flash_delay = remaining_flash_delay - last_flash_update;
       remaining_flash_delay = max(remaining_flash_delay, 0);
-      dprintln(PRINT_CLICK_DEBUG, remaining_flash_delay);
+      dprintln(P_CLICK_DEBUG, remaining_flash_delay);
       if (remaining_flash_delay == 0) {
-        dprint(PRINT_CLICK_DEBUG, "Click time over, turning off flash "); dprintln(PRINT_CLICK_DEBUG, id);
+        dprint(P_CLICK_DEBUG, "Click time over, turning off flash "); dprintln(P_CLICK_DEBUG, id);
         flashOff(); // turn off the NeoPixels
       }
     }
@@ -842,7 +856,7 @@ void NeoGroup::update() {
   // if it has been running for less than one ms
   if (last_flash_update != 0) {
     last_flash_update = 0;
-    dprintln(PRINT_CLICK_DEBUG, "updated last_flash_upate to 0");
+    dprintln(P_CLICK_DEBUG, "updated last_flash_upate to 0");
   }
 }
 
@@ -864,7 +878,7 @@ void NeoGroup::resetOnOffRatioCounters() {
   on_ratio = (double)on_time / (double)(on_time + off_time);
   on_time = 0;
   off_time = 0;
-  dprintln(PRINT_ON_RATIO_DEBUG, "reset the led on/off ratio counters");
+  dprintln(P_ON_RATIO_DEBUG, "reset the led on/off ratio counters");
 }
 
 // mode 0 is just front, mode 1 is just rear, mode 2 is both (using combined values?), mode 3 is both using independent values
@@ -880,9 +894,9 @@ void NeoGroup::updateOnRatio(int color) {
     on_ratio = (double)on_time / (double)(on_time + off_time);
     on_off_len = 0;
   }
-  dprint(PRINT_LED_ON_RATIO_DEBUG, "updated led on/off ratio "); dprint(PRINT_LED_ON_RATIO_DEBUG, " :\t");
-  dprint(PRINT_LED_ON_RATIO_DEBUG, on_ratio); dprint(PRINT_LED_ON_RATIO_DEBUG, "\t=\t"); dprint(PRINT_LED_ON_RATIO_DEBUG, on_time);
-  dprint(PRINT_LED_ON_RATIO_DEBUG, "\t"); dprintln(PRINT_LED_ON_RATIO_DEBUG, off_time);
+  dprint(P_LED_ON_RATIO_DEBUG, "updated led on/off ratio "); dprint(P_LED_ON_RATIO_DEBUG, " :\t");
+  dprint(P_LED_ON_RATIO_DEBUG, on_ratio); dprint(P_LED_ON_RATIO_DEBUG, "\t=\t"); dprint(P_LED_ON_RATIO_DEBUG, on_time);
+  dprint(P_LED_ON_RATIO_DEBUG, "\t"); dprintln(P_LED_ON_RATIO_DEBUG, off_time);
 }
 
 void NeoGroup::addToRemainingFlashDelay(long i) {
