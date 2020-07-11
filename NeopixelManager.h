@@ -41,12 +41,24 @@
 #define P_COLOR_WIPE_DEBUG 0
 #endif
 
+#ifndef P_PACK_COLORS_DEBUG
+#define P_PACK_COLORS_DEBUG 0
+#endif
+
 #ifndef FLASH_DEBOUNCE_TIME
 #define FLASH_DEBOUNCE_TIME 50
 #endif
 
 #ifndef P_LUX_DEBUG 
 #define P_LUX_DEBUG 0
+#endif
+
+#ifndef P_EXTREME_LUX_DEBUG
+#define P_EXTREME_LUX_DEBUG 0
+#endif
+
+#ifndef P_LEDS_ON_
+#define P_LEDS_ON 0
 #endif
 
 #ifndef UPDATE_ON_OFF_RATIOS 
@@ -78,12 +90,20 @@
 #endif
 
 
+
 uint32_t packColors(uint8_t &red, uint8_t &green, uint8_t &blue, double scaler) {
     /*
      * TODO write a function summary
      * 
      * */
   uint32_t color = 0;
+  dprint(P_PACK_COLORS_DEBUG, "pre-bs r:");
+  dprint(P_PACK_COLORS_DEBUG, red);
+  dprint(P_PACK_COLORS_DEBUG, "\tg:");
+  dprint(P_PACK_COLORS_DEBUG, green); 
+  dprint(P_PACK_COLORS_DEBUG, "\tb");
+  dprint(P_PACK_COLORS_DEBUG, blue); 
+
   red = red * scaler;
   green = green * scaler;
   blue = blue * scaler;
@@ -94,6 +114,13 @@ uint32_t packColors(uint8_t &red, uint8_t &green, uint8_t &blue, double scaler) 
   if (green < MIN_BRIGHTNESS) {green = 0;};
   if (blue < MIN_BRIGHTNESS) {blue = 0;};
   color = (red << 16) + (green << 8) + (blue);
+
+  dprint(P_PACK_COLORS_DEBUG, " || final r:");
+  dprint(P_PACK_COLORS_DEBUG, red);
+  dprint(P_PACK_COLORS_DEBUG, "\tg:");
+  dprint(P_PACK_COLORS_DEBUG, green); 
+  dprint(P_PACK_COLORS_DEBUG, "\tb");
+  dprint(P_PACK_COLORS_DEBUG, blue); 
   return color;
 }
 
@@ -480,8 +507,14 @@ void NeoGroup::updateColorLog(uint8_t red, uint8_t green, uint8_t blue) {
 
 void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double brightness, double bs) {
   // TODO this logic is broken...
+  // need a debug rating of at least 2 to print these
+  dprintMajorDivide(P_COLOR_WIPE_DEBUG-1, "Entering ColorWipe() ");
+  dprint(P_COLOR_WIPE_DEBUG-1, " Starting colorWipe in NeoGroup - ");
+  dprint(P_COLOR_WIPE_DEBUG-1, id);
+  dprint(P_COLOR_WIPE_DEBUG-1, " - num_pixels: ");
+  dprintln(P_COLOR_WIPE_DEBUG-1, num_pixels); 
   if (extreme_lux_shdn == true) {
-    dprintln(P_COLOR_WIPE_DEBUG, " colorWipe returning due extreme lux conditions");
+    dprintln(P_EXTREME_LUX_DEBUG, " colorWipe returning due extreme lux conditions");
     return;
   }
   if (shdn_timer < shdn_len) {
@@ -515,21 +548,18 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bright
     bs = bs * user_brightness_scaler;
   }
   int colors = packColors(red, green, blue, bs);
-  //////////////////////////////////////////////////////////////////////////////
-  dprint(P_COLOR_WIPE_DEBUG, id);
-  dprint(P_COLOR_WIPE_DEBUG, " Starting colorWipe in NeoGroup - ");
-  dprint(P_COLOR_WIPE_DEBUG, " num_pixels: ");
-  dprint(P_COLOR_WIPE_DEBUG, num_pixels); 
-  dprint(P_COLOR_WIPE_DEBUG, " - ");
+  dprintln(P_COLOR_WIPE_DEBUG);
 
+  //////////////////////////////////////////////////////////////////////////////
   if (mapping == LED_MAPPING_STANDARD) {
       for (int i = 0; i < num_pixels; i++) {
           leds->setPixel(idx_start + i, colors);
-          dprint(P_COLOR_WIPE_DEBUG, idx_start+i);
-          dprint(P_COLOR_WIPE_DEBUG, ": ");
-          dprint(P_COLOR_WIPE_DEBUG, colors); 
-          dprint(P_COLOR_WIPE_DEBUG, "\t");
+          // dprint(P_COLOR_WIPE_DEBUG, idx_start+i);
+          // dprint(P_COLOR_WIPE_DEBUG, ": ");
+          // dprint(P_COLOR_WIPE_DEBUG, colors); 
+          // dprint(P_COLOR_WIPE_DEBUG, "\t");
       }
+      dprintln(P_COLOR_WIPE_DEBUG);
   } else if (mapping == LED_MAPPING_ROUND) {
       // TODO this logic is broken for when a flash is happening
       red = red * num_pixels;
@@ -564,6 +594,7 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bright
           int _colors = packColors(_red, _green, _blue, brightness_scaler);
           leds->setPixel(idx_start + i, _colors);
       }
+      dprintln(P_COLOR_WIPE_DEBUG);
   }
   else if (mapping == LED_MAPPING_CENTER_OUT) {
       // center ring front: 16, 17, 18, 19
@@ -579,7 +610,8 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bright
       double middle_ring_weight = 0.3;
       // double outer_ring_weight = 0.5;
       // loop for the center rings
-      Serial.println(brightness);
+      dprint(P_COLOR_WIPE_DEBUG, "center out brightness: ");
+      dprintln(P_COLOR_WIPE_DEBUG, brightness);
       
       ///////////////////////////////////////////////////////////////////////////////////
       //////////////////////////// CENTER RING //////////////////////////////////////////
@@ -629,6 +661,7 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bright
             leds->setPixel(outer_rings[i], _red, _green , _blue);
           }
       }
+      dprintln(P_COLOR_WIPE_DEBUG);
   }
   else if (mapping == LED_MAPPING_BOTTOM_UP) {
       // groups are pixe
@@ -729,20 +762,24 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bright
       }
       // g2 has an extra pixel =P
       leds->setPixel(g2[3], g2_colors[0], g2_colors[1], g2_colors[2]);
+      dprintln(P_COLOR_WIPE_DEBUG);
   }
   leds->show();
-  dprint(P_COLOR_WIPE_DEBUG, " finished updating the neopixels");
-
   // if the LEDs are on set "led_on" to true, otherwise turn "led_on" to false
   // also reset led_off_len if the leds  were just turned off
   if (colors == 0) {
-    leds_on = false;
-    dprint(P_COLOR_WIPE_DEBUG, " setting leds_on to false");
+      if (leds_on != false) {
+        leds_on = false;
+        dprintln(P_LEDS_ON, " setting leds_on to false");
+      }
   } else {
-    leds_on = true;
-    dprint(P_COLOR_WIPE_DEBUG, " setting leds_on to true");
+      if (leds_on != true) {
+        leds_on = true;
+        dprintln(P_LEDS_ON, " setting leds_on to true");
+      }
   }
   updateColorLog(red, green, blue);
+  // dprintln(P_COLOR_WIPE_DEBUG, " finished updating the neopixels");
 }
 
 void NeoGroup::colorWipe(int colors) {
