@@ -504,7 +504,7 @@ void NeoGroup::colorWipeHSB(double h, double s, double b) {
     updateHSB(h, s, b);
     HsbToRgb(h, s, b);
     // TODO calculate brightness properly
-    colorWipe(rgb[0], rgb[1], rgb[2], 1.0);
+    colorWipe(rgb[0], rgb[1], rgb[2], b);
 }
 
 void NeoGroup::colorWipeAdd(uint8_t red, uint8_t green, uint8_t blue, double bs) {
