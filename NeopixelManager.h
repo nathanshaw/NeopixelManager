@@ -124,9 +124,12 @@ class NeoGroup {
         void updateAvgBrightnessScaler();
         void resetAvgBrightnessScaler();
         void setBrightnessScaler(double scaler) {brightness_scaler = scaler;updateAvgBrightnessScaler();};
-        void setLuxScaler(double s);
+        void setMinMaxBrightnessFromBS(double s);
         double getOnRatio() {return on_ratio;};
         double on_ratio = 0.5;
+
+        void setMinBrightnessFromLux(double l);
+        void setMaxBrightnessFromLux(double l);
 
         ////////////////////////// Brightness Scaler //////////////////////////////
         double getBrightnessScaler() {return brightness_scaler;};
@@ -303,7 +306,7 @@ uint32_t NeoGroup::packColors(uint8_t &red, uint8_t &green, uint8_t &blue, doubl
     return color;
 }
 
-void NeoGroup::setLuxScaler(double s){
+void NeoGroup::setMinMaxBrightnessFromBS(double s){
     // assume ea number between 0.0 and 3.0
     if (s > 3.0) {
         s = 3.0;
