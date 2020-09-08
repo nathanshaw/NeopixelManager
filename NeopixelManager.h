@@ -86,8 +86,6 @@ double led_on_ratio[2];
 #endif
 
 
-
-
 // todo add on/off bools for the datalogging shiz
 class NeoGroup {
     /* TODO add a class summary
@@ -100,6 +98,7 @@ class NeoGroup {
 
         /////////////////////////////// Datatracking /////////////////////////////
         double red_avg, green_avg, blue_avg;
+        double getAverageBrightness(bool reset);// can reset the trackers if neededd
         void resetRGBAverageTracker();
         bool getLedsOn() {return leds_on;}; // for externally determining if the LEDs are currently on
 
@@ -188,7 +187,7 @@ class NeoGroup {
         uint8_t rgb[3]; // limited from 0.0 - 1.0
         double hue2rgb(double p, double q, double t);
         void RgbToHsb(uint8_t red, uint8_t green, uint8_t blue);
-        void HsbToRgb(double hue, double saturation, double lightness);
+        void HsbToRgb(double hue, double saturation, double lightness);stoffregenPaulStoffstoffregenPaulStoffregenWS2812Serial2020regenWS2812Serial2020
         void updateColorLog(uint8_t red, uint8_t green, uint8_t blue);
         bool extreme_lux_shdn = false;
         uint32_t packColors(uint8_t &red, uint8_t &green, uint8_t &blue, double scaler);
@@ -244,8 +243,8 @@ class NeoGroup {
         void   updateBrightnessScalerTotals();
         void   resetOnOffRatioCounters();
 
-        uint8_t MIN_BRIGHTNESS = 0;
-        uint8_t MAX_BRIGHTNESS = 255;
+        uint16_t MIN_BRIGHTNESS = 0;
+        uint16_t MAX_BRIGHTNESS = 765;
 
         /////////////////////// User Brightness Scaler //////////////////////
         double user_brightness_overide = true;
@@ -271,9 +270,11 @@ uint32_t NeoGroup::packColors(uint8_t &red, uint8_t &green, uint8_t &blue, doubl
     red = red * scaler;
     green = green * scaler;
     blue = blue * scaler;
-    red = min(red, MAX_BRIGHTNESS);
-    green = min(green, MAX_BRIGHTNESS);
-    blue = min(blue, MAX_BRIGHTNESS);
+
+    // red = min(red, MAX_BRIGHTNESS);
+    // green = min(green, MAX_BRIGHTNESS);
+    // blue = min(blue, MAX_BRIGHTNESS);
+
     if (SATURATED_COLORS) {
         if (red >= green && red >= blue) {
             red += (green/2 + blue/2);
@@ -291,19 +292,43 @@ uint32_t NeoGroup::packColors(uint8_t &red, uint8_t &green, uint8_t &blue, doubl
             blue /= 2;
         }
     }
-    if (red < MIN_BRIGHTNESS) {red = MIN_BRIGHTNESS;};
-    if (green < MIN_BRIGHTNESS) {green = MIN_BRIGHTNESS;};
-    if (blue < MIN_BRIGHTNESS) {blue = MIN_BRIGHTNESS;};
 
-    color = (red << 16) + (green << 8) + (blue);
+    if (red + green + blue > MAX_BRIGHTNESS){
+        uint16_t total = red + green + blue;
+        dprint(P_PACK_COLORS + P_COLOR_WIPE, "Too Bright, ");
+                dprint(P_PACK_COLORS + P_COLOR_WIPE, total);
+                dprint(P_PACK_COLORS + P_COLOR_WIPE, "reducing the brightness of each color: ");
+                double factor = total / MAX_BRIGHTNESS;
+                red = red / factor;
+                green = green / factor;
+                blue = blue / factor;
+                dprint(P_PACK_COLORS, "\tr: ");
+                dprint(P_PACK_COLORS, red);
+                dprint(P_PACK_COLORS, "\tg: ");
+                dprint(P_PACK_COLORS, green); 
+                dprint(P_PACK_COLORS, "\tb: ");
+                dprint(P_PACK_COLORS, blue); 
+                }
 
-    dprint(P_PACK_COLORS, " || final r: ");
-    dprint(P_PACK_COLORS, red);
-    dprint(P_PACK_COLORS, "\tg: ");
-    dprint(P_PACK_COLORS, green); 
-    dprint(P_PACK_COLORS, "\tb ");
-    dprintln(P_PACK_COLORS, blue); 
-    return color;
+                // if (red < MIN_BRIGHTNESS) {red = MIN_BRIGHTNESS;};
+                // if (green < MIN_BRIGHTNESS) {green = MIN_BRIGHTNESS;};
+                // if (blue < MIN_BRIGHTNESS) {blue = MIN_BRIGHTNESS;};
+
+                color = (red << 16) + (green << 8) + (blue);
+
+                dprint(P_PACK_COLORS, " || final r: ");
+                dprint(P_PACK_COLORS, red);
+                dprint(P_PACK_COLORS, "\tg: ");
+                dprint(P_PACK_COLORS, green); 
+                dprint(P_PACK_COLORS, "\tb ");
+                dprintln(P_PACK_COLORS, blue); 
+                return color;
+}
+
+double NeoGroup::getAverageBrightness(bool reset) {
+    double val = (blue_avg + red_avg + green_avg)/3;
+    if (reset) {resetRGBAverageTracker();};
+    return val;
 }
 
 void NeoGroup::setMinMaxBrightnessFromBS(double s){
@@ -314,10 +339,10 @@ void NeoGroup::setMinMaxBrightnessFromBS(double s){
         s = 0.0;
     }
     if  (s >= 1.0) {
-        MAX_BRIGHTNESS = 255;
-        MIN_BRIGHTNESS = (s - 1.0) * 30;
+        MAX_BRIGHTNESS = 765;
+        MIN_BRIGHTNESS = (s - 1.0) * 30.0;
     } else {
-        MAX_BRIGHTNESS = s * 255;
+        MAX_BRIGHTNESS = (uint16_t)(s * 765.0);
         MIN_BRIGHTNESS = 0;
     }
     dprint(P_BRIGHTNESS_SCALER, "MIN/MAX BRIGHTNESS updated due to lux readings: ");
