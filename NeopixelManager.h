@@ -21,8 +21,6 @@ uint32_t led_off_times[2] = {1, 1};
 double led_on_ratio[2];
 */
 #include <WS2812Serial.h>
-#include "../Configuration.h"
-#include "../Macros.h"
 #include <PrintUtils.h>
 
 #ifndef P_CLICK
@@ -187,7 +185,7 @@ class NeoGroup {
         uint8_t rgb[3]; // limited from 0.0 - 1.0
         double hue2rgb(double p, double q, double t);
         void RgbToHsb(uint8_t red, uint8_t green, uint8_t blue);
-        void HsbToRgb(double hue, double saturation, double lightness);stoffregenPaulStoffstoffregenPaulStoffregenWS2812Serial2020regenWS2812Serial2020
+        void HsbToRgb(double hue, double saturation, double lightness);
         void updateColorLog(uint8_t red, uint8_t green, uint8_t blue);
         bool extreme_lux_shdn = false;
         uint32_t packColors(uint8_t &red, uint8_t &green, uint8_t &blue, double scaler);
