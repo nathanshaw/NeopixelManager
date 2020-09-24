@@ -23,40 +23,8 @@ double led_on_ratio[2];
 #include <WS2812Serial.h>
 #include <PrintUtils.h>
 
-#ifndef P_CLICK
-#define P_CLICK 0
-#endif
-
-#ifndef P_ON_RATIO 
-#define P_ON_RATIO 0
-#endif
-
-#ifndef P_LED_ON_RATIO
-#define P_LED_ON_RATIO 0
-#endif
-
-#ifndef P_COLOR_WIPE
-#define P_COLOR_WIPE 0
-#endif
-
-#ifndef P_PACK_COLORS
-#define P_PACK_COLORS 0
-#endif
-
 #ifndef FLASH_DEBOUNCE_TIME
 #define FLASH_DEBOUNCE_TIME 50
-#endif
-
-#ifndef P_LUX 
-#define P_LUX 0
-#endif
-
-#ifndef P_EXTREME_LUX
-#define P_EXTREME_LUX 0
-#endif
-
-#ifndef P_LEDS_ON
-#define P_LEDS_ON 0
 #endif
 
 #ifndef UPDATE_ON_OFF_RATIOS 
@@ -101,14 +69,14 @@ class NeoGroup {
         bool getLedsOn() {return leds_on;}; // for externally determining if the LEDs are currently on
 
         /////////////////////////////// Flashes //////////////////////////////////
-        uint32_t getOnOffLen() {return on_off_len;};
-        uint32_t getOffLen() {return off_len;};
-        uint32_t getShdnTimer() {return shdn_timer;};
-        uint32_t getNumFlashes() {return num_flashes;};
+        unsigned long getOnOffLen() {return on_off_len;};
+        unsigned long getOffLen() {return off_len;};
+        unsigned long getShdnTimer() {return shdn_timer;};
+        unsigned long getNumFlashes() {return num_flashes;};
         void setFlashOn(bool val) {flash_on = val;};
         bool getFlashOn() {return flash_on;};
-        uint32_t num_flashes = 0;// these are public so they can be tracked by the datalog manager
-        uint32_t total_flashes = 0;
+        unsigned long num_flashes = 0;// these are public so they can be tracked by the datalog manager
+        unsigned long total_flashes = 0;
         double fpm;
         double getFPM();
         void resetFPM();
@@ -116,7 +84,7 @@ class NeoGroup {
         void setRemainingFlashDelay(long d);
 
         ////////////////////////////// SHDN Timer ///////////////////////////////
-        uint32_t getShdnLen();
+        unsigned long getShdnLen();
         bool isInShutdown();
         void updateAvgBrightnessScaler();
         void resetAvgBrightnessScaler();
@@ -178,7 +146,26 @@ class NeoGroup {
         void setExtremeLuxShdn(bool e){extreme_lux_shdn = e;};
         bool getLuxShdn() { return extreme_lux_shdn;};
 
+        void setPrintOnset(bool s){P_ONSET = s;};
+        void setPrintOnRatio(bool s){P_ON_RATIO = s;};
+        void setPrintColorWipe(bool s){P_COLOR_WIPE = s;};
+        void setPrintLux(bool s){P_LUX = s;};
+        void setPrintExtremeLux(bool s){P_EXTREME_LUX = s;};
+        void setPrintLedsOn(bool s){P_LEDS_ON = s;};
+        void setPrintBrightnessScaler(bool s){P_BRIGHTNESS_SCALER = s;};
+        void setPrintAll(bool s);
+
     private:
+        /////////////////// Printing ////////////////////
+        bool P_ONSET = false;
+        bool P_ON_RATIO = false;
+        bool P_COLOR_WIPE = false; 
+        bool P_PACK_COLORS = false;
+        bool P_LUX = false;
+        bool P_EXTREME_LUX = false;
+        bool P_LEDS_ON = false;
+        bool P_BRIGHTNESS_SCALER = false;
+
         bool flash_dominates = false;
         uint8_t mapping = LED_MAPPING_STANDARD;
         double hsb[3]; // limited from 0 - 255
@@ -220,7 +207,7 @@ class NeoGroup {
         int idx_end;
         int num_pixels;
         elapsedMillis shdn_timer; // if this is below a certain threshold then shutdown everything
-        uint32_t shdn_len = 0;
+        unsigned long shdn_len = 0;// this needs to be a long to 
         bool leds_on = false;
         elapsedMillis last_flash; // the last time a flash message was received
         elapsedMillis on_off_len; // this is reset every time the leds shutdown or turn on (length of time on or off)
@@ -231,7 +218,7 @@ class NeoGroup {
         //////////////////////// On Ratio /////////////////////////////////////
         uint64_t on_time = 1;
         uint64_t off_time = 1;
-        uint32_t last_on_ratio_update = 0;
+        unsigned long last_on_ratio_update = 0;
         void updateOnRatio(int color);
 
         /////////////////////// Brightness Scaler ////////////////////////////
@@ -417,7 +404,7 @@ void NeoGroup::powerOn() {
     shdn_timer += shdn_len;
 }
 
-uint32_t NeoGroup::getShdnLen() {
+unsigned long NeoGroup::getShdnLen() {
     if (shdn_timer <= shdn_len) {
         return shdn_len - shdn_timer;
     } else  {
@@ -767,11 +754,11 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bright
         // g2     5     2     7     9
         // g1        1         6  10
         int g1[3] = {1, 6, 10};
-        uint8_t g1_colors[3];
+        uint8_t g1_colors[3] = {0,0,0};
         int g2[4] = {5, 2, 7, 9};
-        uint8_t g2_colors[3];
+        uint8_t g2_colors[3] = {0,0,0};
         int g3[3] = {4, 3, 8};
-        uint8_t g3_colors[3];
+        uint8_t g3_colors[3] = {0,0,0};
         // add all the energy for each colour together
         red = red * num_pixels;
         green = green * num_pixels;
@@ -883,9 +870,9 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bright
 void NeoGroup::flashOff() {
     // if the flash is allowed to be turned off
     if (remaining_flash_delay <= 0) {
-        dprint(P_CLICK, id);
-        dprint(P_CLICK, " FlashOff : ");
-        dprintln(P_CLICK, last_flash);
+        dprint(P_ONSET, id);
+        dprint(P_ONSET, " FlashOff : ");
+        dprintln(P_ONSET, last_flash);
         flash_on = false;
         if (leds_on != false) {
             dprintln(P_LEDS_ON, "leds_on set to false");
@@ -914,11 +901,11 @@ bool NeoGroup::flashOn(uint8_t red, uint8_t green, uint8_t blue) {
                 num_flashes = num_flashes  + 1;
                 total_flashes++;
                 getFPM();
-                dprint(P_CLICK, id);
-                dprint(P_CLICK, " FLASH ON #");
-                dprint(P_CLICK, num_flashes);
-                dprint(P_CLICK, " Flashed "); dprint(P_CLICK, remaining_flash_delay);
-                dprint(P_CLICK, " FPM "); dprintln(P_CLICK, fpm);
+                dprint(P_ONSET, id);
+                dprint(P_ONSET, " FLASH ON #");
+                dprint(P_ONSET, num_flashes);
+                dprint(P_ONSET, " Flashed "); dprint(P_ONSET, remaining_flash_delay);
+                dprint(P_ONSET, " FPM "); dprintln(P_ONSET, fpm);
             } else { // if a flash is on then increment the remaining_flash_Delay
                 addToRemainingFlashDelay(1);
                 if (remaining_flash_delay > flash_max_time) {
@@ -928,8 +915,8 @@ bool NeoGroup::flashOn(uint8_t red, uint8_t green, uint8_t blue) {
             return true;
         }
     } else {
-        dprint(P_CLICK, "Flash skipped due to FLASH_DEBOUNCE_TIME : ");
-        dprintln(P_CLICK, last_flash);
+        dprint(P_ONSET, "Flash skipped due to FLASH_DEBOUNCE_TIME : ");
+        dprintln(P_ONSET, last_flash);
     }
     return false;
 }
@@ -945,27 +932,27 @@ void NeoGroup::update() {
     // if there is time remaining in the flash it either needs to be turned
     // on or the timer needs to increment
     if (remaining_flash_delay > 0) {
-        dprintMinorDivide(P_CLICK);
-        dprint(P_CLICK, "flash delay "); dprint(P_CLICK, id); dprint(P_CLICK, " : ");
-        dprint(P_CLICK, remaining_flash_delay); dprintTab(P_CLICK);
-        dprint(P_CLICK, last_flash_update); dprintTab(P_CLICK);
+        dprintMinorDivide(P_ONSET);
+        dprint(P_ONSET, "flash delay "); dprint(P_ONSET, id); dprint(P_ONSET, " : ");
+        dprint(P_ONSET, remaining_flash_delay); dprintTab(P_ONSET);
+        dprint(P_ONSET, last_flash_update); dprintTab(P_ONSET);
         // if the flash is not currently on, turn the flash on
         if (flash_on < 1) { //and the light is not currently on
-            dprintln(P_CLICK, "-- Turning the Flash ON --");
+            dprintln(P_ONSET, "-- Turning the Flash ON --");
             flashOn(flash_red, flash_green, flash_blue);// flash on
         }
         // if the flash is already on subtract from the timer
         else {
-            dprintln(P_CLICK, "- - - - - - - - - - - - - - - - - - -");
-            dprint(P_CLICK, "last_flash :\t"); dprintln(P_CLICK, last_flash);
-            dprint(P_CLICK, "remaining_flash_delay "); 
-            dprint(P_CLICK, id); dprint(P_CLICK, ":\t");
-            dprint(P_CLICK, remaining_flash_delay); dprint(P_CLICK, "\t");
+            dprintln(P_ONSET, "- - - - - - - - - - - - - - - - - - -");
+            dprint(P_ONSET, "last_flash :\t"); dprintln(P_ONSET, last_flash);
+            dprint(P_ONSET, "remaining_flash_delay "); 
+            dprint(P_ONSET, id); dprint(P_ONSET, ":\t");
+            dprint(P_ONSET, remaining_flash_delay); dprint(P_ONSET, "\t");
             remaining_flash_delay = remaining_flash_delay - last_flash_update;
             remaining_flash_delay = max(remaining_flash_delay, 0);
-            dprintln(P_CLICK, remaining_flash_delay);
+            dprintln(P_ONSET, remaining_flash_delay);
             if (remaining_flash_delay == 0) {
-                dprint(P_CLICK, "Click time over, turning off flash "); dprintln(P_CLICK, id);
+                dprint(P_ONSET, "Click time over, turning off flash "); dprintln(P_ONSET, id);
                 flashOff(); // turn off the NeoPixels
             }
         }
@@ -974,7 +961,7 @@ void NeoGroup::update() {
     // if it has been running for less than one ms
     if (last_flash_update != 0) {
         last_flash_update = 0;
-        dprintln(P_CLICK, "updated last_flash_upate to 0");
+        dprintln(P_ONSET, "updated last_flash_upate to 0");
     }
 }
 
@@ -1019,9 +1006,9 @@ void NeoGroup::updateOnRatio(int color) {
         on_off_len = 0;
     }
 
-    dprint(P_LED_ON_RATIO, "updated led on/off ratio "); dprint(P_LED_ON_RATIO, " :\t");
-    dprint(P_LED_ON_RATIO, on_ratio); dprint(P_LED_ON_RATIO, "\t=\t"); dprint(P_LED_ON_RATIO, on_time);
-    dprint(P_LED_ON_RATIO, "\t"); dprintln(P_LED_ON_RATIO, off_time);
+    dprint(P_ON_RATIO, "updated led on/off ratio "); dprint(P_ON_RATIO, " :\t");
+    dprint(P_ON_RATIO, on_ratio); dprint(P_ON_RATIO, "\t=\t"); dprint(P_ON_RATIO, on_time);
+    dprint(P_ON_RATIO, "\t"); dprintln(P_ON_RATIO, off_time);
 }
 
 void NeoGroup::addToRemainingFlashDelay(long i) {
@@ -1040,6 +1027,17 @@ bool NeoGroup::isInShutdown() {
         return true;
     }
     return false;
+}
+
+void NeoGroup::setPrintAll(bool s) {
+        P_ONSET = s;
+        P_ON_RATIO = s;
+        P_COLOR_WIPE = s;
+        P_PACK_COLORS = s;
+        P_LUX = s;
+        P_EXTREME_LUX = s;
+        P_LEDS_ON = s;
+        P_BRIGHTNESS_SCALER = s;
 }
 
 #endif // __LEDS_H__
