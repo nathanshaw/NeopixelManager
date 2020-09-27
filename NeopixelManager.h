@@ -22,6 +22,7 @@ double led_on_ratio[2];
 */
 #include <WS2812Serial.h>
 #include <PrintUtils.h>
+#include <ValueTracker.h>
 
 #ifndef FLASH_DEBOUNCE_TIME
 #define FLASH_DEBOUNCE_TIME 50
@@ -90,9 +91,9 @@ class NeoGroup {
         ////////////////////////////// SHDN Timer ///////////////////////////////
         unsigned long getShdnLen();
         bool isInShutdown();
-        void updateAvgBrightnessScaler();
         void resetAvgBrightnessScaler();
-        void setBrightnessScaler(double scaler) {brightness_scaler = scaler;updateAvgBrightnessScaler();};
+        void setLuxBS(double scaler) {lux_bs = scaler;lux_bs_tracker.update();};
+
         void setMinMaxBrightnessFromBS(double s);
         double getOnRatio() {return on_ratio;};
         double on_ratio = 0.5;
@@ -101,14 +102,15 @@ class NeoGroup {
         void setMaxBrightnessFromLux(double l);
 
         ////////////////////////// Brightness Scaler //////////////////////////////
-        double getBrightnessScaler() {return brightness_scaler;};
+        double getLuxBS() {return lux_bs;};
+
         double getAvgBrightnessScaler();
         double getAvgBrightness(String type);
         long getRemainingFlashDelay() {return remaining_flash_delay;};
 
         void updateUserBrightnessScaler(double b) {
             user_brightness_overide = true;
-            user_brightness_scaler = b;};
+            user_bs = b;};
 
         void setMinBrightness(uint8_t m){MIN_BRIGHTNESS = m;};
         void setMaxBrightness(uint8_t m){MAX_BRIGHTNESS = m;};
@@ -148,7 +150,8 @@ class NeoGroup {
         void setPrintLux(bool s){p_lux = s;};
         void setPrintExtremeLux(bool s){p_extreme_lux = s;};
         void setPrintLedsOn(bool s){p_leds_on = s;};
-        void setPrintBrightnessScaler(bool s){p_brightness_scaler = s;};
+        void setPrintBrightnessScaler(bool s){p_bs = s;};
+        void setPrintPackColors(bool s){p_pack_colors = s;};
         void setPrintAll(bool s);
 
         ///////////////////////////// Misc //////////////////////////////////////
@@ -163,12 +166,12 @@ class NeoGroup {
         /////////////////// Printing ////////////////////
         bool p_onset = false;
         bool p_on_ratio = false;
-        bool p_color_wipe = false; 
+        bool p_color_wipe = false;
         bool p_pack_colors = false;
         bool p_lux = false;
         bool p_extreme_lux = false;
         bool p_leds_on = false;
-        bool p_brightness_scaler = false;
+        bool p_bs = false;
 
         bool flash_dominates = false;
         uint8_t mapping = LED_MAPPING_STANDARD;
@@ -226,10 +229,11 @@ class NeoGroup {
         void updateOnRatio(int color);
 
         /////////////////////// Brightness Scaler ////////////////////////////
-        double brightness_scaler = 1.0;
+        double lux_bs = 1.0;
+        ValueTrackerDouble lux_bs_tracker = ValueTrackerDouble(&lux_bs, 1.0);
+
         double brightness_scaler_total;
         double brightness_scaler_changes;
-        void   updateBrightnessScalerTotals();
         void   resetOnOffRatioCounters();
 
         uint16_t MIN_BRIGHTNESS = 0;
@@ -237,7 +241,7 @@ class NeoGroup {
 
         /////////////////////// User Brightness Scaler //////////////////////
         double user_brightness_overide = true;
-        double user_brightness_scaler = 1.0;
+        double user_bs = 1.0;
 
 };
 
@@ -252,21 +256,32 @@ uint32_t NeoGroup::packColors(uint8_t &red, uint8_t &green, uint8_t &blue, doubl
      * */
     uint32_t color = 0;
     dprintMinorDivide(p_pack_colors);
-    dprint(p_pack_colors, "Entering PackColors(): ");
-    dprint(p_pack_colors, "pre-bs  r: ");
+    dprint(p_pack_colors, "Entering PackColors()        :\t");
     dprint(p_pack_colors, red);
-    dprint(p_pack_colors, "\tg: ");
+    dprint(p_pack_colors, "\t");
     dprint(p_pack_colors, green); 
-    dprint(p_pack_colors, "\tb: ");
-    dprint(p_pack_colors, blue); 
+    dprint(p_pack_colors, "\t");
+    dprintln(p_pack_colors, blue); 
+    if (scaler > 1.01 || scaler < 0.99) {
+        double dred = (double)red * scaler;
+        double dgreen = (double)green * scaler;
+        double dblue =(double)blue * scaler;
 
-    red = red * scaler;
-    green = green * scaler;
-    blue = blue * scaler;
+        dred = minf(dred, MAX_BRIGHTNESS);
+        dgreen = minf(dgreen, MAX_BRIGHTNESS);
+        dblue = minf(dblue, MAX_BRIGHTNESS);
 
-    // red = min(red, MAX_BRIGHTNESS);
-    // green = min(green, MAX_BRIGHTNESS);
-    // blue = min(blue, MAX_BRIGHTNESS);
+        red = (uint8_t)dred;
+        green = (uint8_t)dgreen;
+        blue = (uint8_t)dblue;
+
+        dprint(p_pack_colors, "After lux_bs scaling     :\t");
+        dprint(p_pack_colors, red);
+        dprint(p_pack_colors, "\t");
+        dprint(p_pack_colors, green); 
+        dprint(p_pack_colors, "\t");
+        dprintln(p_pack_colors, blue); 
+    }
 
     if (SATURATED_COLORS) {
         if (red >= green && red >= blue) {
@@ -284,38 +299,44 @@ uint32_t NeoGroup::packColors(uint8_t &red, uint8_t &green, uint8_t &blue, doubl
             green /= 2;
             blue /= 2;
         }
+        dprint(p_pack_colors, "After SATURATED_COLORS   :\t");
+        dprint(p_pack_colors, red);
+        dprint(p_pack_colors, "\t");
+        dprint(p_pack_colors, green); 
+        dprint(p_pack_colors, "\t");
+        dprintln(p_pack_colors, blue); 
     }
 
     if (red + green + blue > MAX_BRIGHTNESS){
         uint16_t total = red + green + blue;
         dprint(p_pack_colors + p_color_wipe, "Too Bright, ");
-                dprint(p_pack_colors + p_color_wipe, total);
-                dprint(p_pack_colors + p_color_wipe, "reducing the brightness of each color: ");
-                double factor = total / MAX_BRIGHTNESS;
-                red = red / factor;
-                green = green / factor;
-                blue = blue / factor;
-                dprint(p_pack_colors, "\tr: ");
-                dprint(p_pack_colors, red);
-                dprint(p_pack_colors, "\tg: ");
-                dprint(p_pack_colors, green); 
-                dprint(p_pack_colors, "\tb: ");
-                dprint(p_pack_colors, blue); 
-                }
+        dprint(p_pack_colors + p_color_wipe, total);
+        dprint(p_pack_colors + p_color_wipe, "reducing the brightness of each color: ");
+        double factor = total / MAX_BRIGHTNESS;
+        red = red / factor;
+        green = green / factor;
+        blue = blue / factor;
+        dprint(p_pack_colors, "\tr: ");
+        dprint(p_pack_colors, red);
+        dprint(p_pack_colors, "\tg: ");
+        dprint(p_pack_colors, green); 
+        dprint(p_pack_colors, "\tb: ");
+        dprint(p_pack_colors, blue); 
+    }
 
-                // if (red < MIN_BRIGHTNESS) {red = MIN_BRIGHTNESS;};
-                // if (green < MIN_BRIGHTNESS) {green = MIN_BRIGHTNESS;};
-                // if (blue < MIN_BRIGHTNESS) {blue = MIN_BRIGHTNESS;};
+    // if (red < MIN_BRIGHTNESS) {red = MIN_BRIGHTNESS;};
+    // if (green < MIN_BRIGHTNESS) {green = MIN_BRIGHTNESS;};
+    // if (blue < MIN_BRIGHTNESS) {blue = MIN_BRIGHTNESS;};
 
-                color = (red << 16) + (green << 8) + (blue);
+    color = (red << 16) + (green << 8) + (blue);
 
-                dprint(p_pack_colors, " || final r: ");
-                dprint(p_pack_colors, red);
-                dprint(p_pack_colors, "\tg: ");
-                dprint(p_pack_colors, green); 
-                dprint(p_pack_colors, "\tb ");
-                dprintln(p_pack_colors, blue); 
-                return color;
+        dprint(p_pack_colors, "                         :\t");
+    dprint(p_pack_colors, red);
+    dprint(p_pack_colors, "\t");
+    dprint(p_pack_colors, green); 
+    dprint(p_pack_colors, "\t");
+    dprintln(p_pack_colors, blue); 
+    return color;
 }
 
 double NeoGroup::getAverageBrightness(bool reset) {
@@ -338,10 +359,10 @@ void NeoGroup::setMinMaxBrightnessFromBS(double s){
         MAX_BRIGHTNESS = (uint16_t)(s * 765.0);
         MIN_BRIGHTNESS = 0;
     }
-    dprint(p_brightness_scaler, "MIN/MAX BRIGHTNESS updated due to lux readings: ");
-    dprint(p_brightness_scaler, MIN_BRIGHTNESS);
-    dprint(p_brightness_scaler, " / ");
-    dprintln(p_brightness_scaler, MAX_BRIGHTNESS);
+    dprint(p_bs, "MIN/MAX BRIGHTNESS updated due to lux readings: ");
+    dprint(p_bs, MIN_BRIGHTNESS);
+    dprint(p_bs, " / ");
+    dprintln(p_bs, MAX_BRIGHTNESS);
 }
 
 void NeoGroup::resetFPM() {
@@ -376,31 +397,37 @@ NeoGroup::NeoGroup(WS2812Serial *neos, int start_idx, int end_idx, String _id, u
 
 bool NeoGroup::shutdown(uint16_t len) {
     // return 0 if lux shutdown not a success, 1 if it is
-    dprint(p_lux, "SHUTDOWN FOR NEOGROUP CALLED WITH A LEN OF: ");
-    dprintln(p_lux, len);
-    delay(2000);
     if (!isInShutdown()) {
         dprint(p_lux, millis());dprint(p_lux, "\tSHUTTING DOWN GROUP ");
         dprint(p_lux, id);
         dprint(p_lux, " for a total of at least ");
         dprint(p_lux, len);
         dprint(p_lux," ms");
-        delay(2000);
+        // delay(1000);
         colorWipe(0, 0, 0, 0.0);
-        dprint(p_lux," -- neopixels shutdown now");
-        delay(2000);
+        dprintln(p_lux," -- neopixels shutdown now");
+        // delay(1000);
         shdn_len = len;
+        dprintln(p_lux, "shdn_len set to len ");
+        // delay(1000);
         shdn_timer = 0;
+        dprintln(p_lux, "-- shdn_timer is reset to 0");
+        // delay(1000);
         if (leds_on != false) {
             leds_on = false;
-            dprint(p_leds_on, "\nsetting leds_on to false");
+            dprint(p_leds_on || p_lux, "\nsetting leds_on to false");
         }
         dprintln(p_leds_on);
-        delay(2000);
+        // delay(1000);
         dprint(p_lux, "exiting neogroup.shutdown() now");
+        return true;
+    }
+    else {
+        dprint(p_lux, "SHUTDOWN FOR NEOGROUP CALLED WITH A LEN OF: ");
+        dprintln(p_lux, len);
+        dprintln(p_lux, "but has been ignored as NeoGroup is already in shutdown");
         return false;
     }
-    return true;
 }
 
 void NeoGroup::printColors() {
@@ -554,11 +581,11 @@ void NeoGroup::colorWipeAdd(uint8_t red, uint8_t green, uint8_t blue) {
     green = constrain(green, 0 , 255);
     blue += rgb[2];
     blue = constrain(blue, 0, 255);
-    colorWipe(red, green, blue, brightness_scaler);
+    colorWipe(red, green, blue, lux_bs);
 }
 
 void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double brightness) {
-    colorWipe(red, green, blue, brightness, brightness_scaler);
+    colorWipe(red, green, blue, brightness, lux_bs);
 }
 
 void NeoGroup::updateColorLog(uint8_t red, uint8_t green, uint8_t blue) {
@@ -656,7 +683,7 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bright
     // packColors will take the red, green and blue values (0 - 255) and
     // scale them according the brightness scaler
     if (user_brightness_overide == true) {
-        bs = bs * user_brightness_scaler;
+        bs = bs * user_bs;
     }
     int colors = packColors(red, green, blue, bs);
 
@@ -701,7 +728,7 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bright
             red = red - _red;
             green = green - _green;
             blue = blue - _blue;
-            int _colors = packColors(_red, _green, _blue, brightness_scaler);
+            int _colors = packColors(_red, _green, _blue, lux_bs);
             leds->setPixel(idx_start + i, _colors);
         }
     }
@@ -915,7 +942,7 @@ bool NeoGroup::flashOn(uint8_t red, uint8_t green, uint8_t blue) {
             // if a flash is not currently on
             if ( (flash_on == false) || (leds_on == false) ) {
                 remaining_flash_delay = flash_min_time;
-                colorWipe(red, green, blue, brightness_scaler * 1.5); // has to be on first as flash_on will block the colorWipe
+                colorWipe(red, green, blue, lux_bs * 1.5); // has to be on first as flash_on will block the colorWipe
                 flash_on = true; // turn the light on along with the flag
                 if (leds_on != true) {
                     dprintln(p_leds_on, "leds_on set to true");
@@ -961,7 +988,7 @@ void NeoGroup::update() {
         dprint(p_onset, remaining_flash_delay); dprintTab(p_onset);
         dprint(p_onset, last_flash_update); dprintTab(p_onset);
         // if the flash is not currently on, turn the flash on
-        if (flash_on < 1) { //and the light is not currently on
+        if (flash_on == false) { //and the light is not currently on
             dprintln(p_onset, "-- Turning the Flash ON --");
             flashOn(flash_red, flash_green, flash_blue);// flash on
         }
@@ -989,18 +1016,13 @@ void NeoGroup::update() {
     }
 }
 
-void NeoGroup::updateAvgBrightnessScaler() {
-    brightness_scaler_total += brightness_scaler;
-    brightness_scaler_changes++;
-}
 
 double NeoGroup::getAvgBrightnessScaler() {
-    return brightness_scaler_total / brightness_scaler_changes;
+    return lux_bs_tracker.getAvg();
 }
 
 void NeoGroup::resetAvgBrightnessScaler() {
-    brightness_scaler_total = 0;
-    brightness_scaler_changes = 0;
+    lux_bs_tracker.getAvg(true);
 }
 
 void NeoGroup::resetOnOffRatioCounters() {
@@ -1061,7 +1083,7 @@ void NeoGroup::setPrintAll(bool s) {
         p_lux = s;
         p_extreme_lux = s;
         p_leds_on = s;
-        p_brightness_scaler = s;
+        p_bs = s;
 }
 
 #endif // __LEDS_H__
