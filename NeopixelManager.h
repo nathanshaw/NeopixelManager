@@ -22,7 +22,7 @@ double led_on_ratio[2];
 */
 #include <WS2812Serial.h>
 #include <PrintUtils.h>
-#include <ValueTracker.h>
+#include <ValueTrackerDouble.h>
 
 #ifndef FLASH_DEBOUNCE_TIME
 #define FLASH_DEBOUNCE_TIME 50
@@ -42,10 +42,6 @@ double led_on_ratio[2];
 
 #ifndef LED_MAPPING_ROUND
 #define LED_MAPPING_ROUND 2
-#endif
-
-#ifndef SATURATED_COLORS 
-#define SATURATED_COLORS 0
 #endif
 
 #ifndef LED_MAPPING_CENTER_OUT
@@ -120,6 +116,8 @@ class NeoGroup {
         double getHue(){return hsb[0];};
         double getSat(){return hsb[1];};
         double getBright(){return hsb[2];};
+
+        void setSaturatedColors(bool s){saturated_colors = s;};
 
         //////////////////////////////// ColorWipes ///////////////////////////////
         void colorWipe(uint8_t red, uint8_t green, uint8_t blue, double brightness, double bs);
@@ -230,7 +228,7 @@ class NeoGroup {
 
         /////////////////////// Brightness Scaler ////////////////////////////
         double lux_bs = 1.0;
-        ValueTrackerDouble lux_bs_tracker = ValueTrackerDouble(&lux_bs, 1.0);
+        ValueTrackerDouble lux_bs_tracker = ValueTrackerDouble("neom_lux_bs",&lux_bs, 1.0);
 
         double brightness_scaler_total;
         double brightness_scaler_changes;
@@ -242,7 +240,8 @@ class NeoGroup {
         /////////////////////// User Brightness Scaler //////////////////////
         double user_brightness_overide = true;
         double user_bs = 1.0;
-
+        /////////////////////// Saturated Colors ////////////////////////////
+        bool saturated_colors = false;
 };
 
 void NeoGroup::init() {
@@ -283,23 +282,23 @@ uint32_t NeoGroup::packColors(uint8_t &red, uint8_t &green, uint8_t &blue, doubl
         dprintln(p_pack_colors, blue); 
     }
 
-    if (SATURATED_COLORS) {
+    if (saturated_colors) {
         if (red >= green && red >= blue) {
-            red += (green/2 + blue/2);
-            green /= 2;
-            blue /= 2;
+            red += (green*0.5 + blue*0.5);
+            green /= 3;
+            blue /= 3;
         }
         else if (green >= red && green >= blue) {
             green += (red/2 + blue/2);
-            red /= 2;
-            blue /= 2;
+            red /= 3;
+            blue /= 3;
         }
         else if (blue >= red && blue >= green) {
             blue += (red/2 + green /2);
-            green /= 2;
-            blue /= 2;
+            green /= 3;
+            blue /= 3;
         }
-        dprint(p_pack_colors, "After SATURATED_COLORS   :\t");
+        dprint(p_pack_colors, "After saturated_colors   :\t");
         dprint(p_pack_colors, red);
         dprint(p_pack_colors, "\t");
         dprint(p_pack_colors, green); 
