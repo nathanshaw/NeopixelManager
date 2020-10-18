@@ -24,10 +24,6 @@ double led_on_ratio[2];
 #include <PrintUtils.h>
 #include <ValueTrackerDouble.h>
 
-#ifndef FLASH_DEBOUNCE_TIME
-#define FLASH_DEBOUNCE_TIME 50
-#endif
-
 #ifndef UPDATE_ON_OFF_RATIOS 
 #define UPDATE_ON_OFF_RATIOS 1
 #endif
@@ -60,29 +56,35 @@ class NeoGroup {
 
         void init();
         void begin(){init();};
-        void setPixel(uint16_t num,uint8_t red, uint8_t green, uint8_t blue, double brightness );
-        void setFlashBehaviour(bool f){flash_dominates = f;};
+        void setPixel(uint16_t num,uint16_t red, uint16_t green, uint16_t blue, double brightness );
 
         /////////////////////////////// Datatracking /////////////////////////////
         double red_avg, green_avg, blue_avg;
         double getAverageBrightness(bool reset);// can reset the trackers if neededd
         void resetRGBAverageTracker();
         bool getLedsOn() {return leds_on;}; // for externally determining if the LEDs are currently on
+        void update();
 
         /////////////////////////////// Flashes //////////////////////////////////
+        bool flashOn(uint16_t red, uint16_t green, uint16_t blue); // perhaps add time for flash to flashOn
+        bool flashOn();
+        void flashOff();
+        void setOnsetColors(uint16_t red, uint16_t green, uint16_t blue);
+        void setSongColors(uint16_t red, uint16_t green, uint16_t blue);
+        void powerOn(); // force a power on, overriding any shdn_timer
         unsigned long getOnOffLen() {return on_off_len;};
         unsigned long getOffLen() {return off_len;};
         unsigned long getShdnTimer() {return shdn_timer;};
         unsigned long getNumFlashes() {return num_flashes;};
         void setFlashOn(bool val) {flash_on = val;};
         bool getFlashOn() {return flash_on;};
-        unsigned long num_flashes = 0;// these are public so they can be tracked by the datalog manager
-        unsigned long total_flashes = 0;
-        double fpm;
         double getFPM();
         void resetFPM();
+
         void addToRemainingFlashDelay(long i);
         void setRemainingFlashDelay(long d);
+
+        void setFlashBehaviour(bool f){flash_dominates = f;};
 
         ////////////////////////////// SHDN Timer ///////////////////////////////
         unsigned long getShdnLen();
@@ -108,8 +110,8 @@ class NeoGroup {
             user_brightness_overide = true;
             user_bs = b;};
 
-        void setMinBrightness(uint8_t m){MIN_BRIGHTNESS = m;};
-        void setMaxBrightness(uint8_t m){MAX_BRIGHTNESS = m;};
+        void setMinBrightness(uint16_t m){MIN_BRIGHTNESS = m;};
+        void setMaxBrightness(uint16_t m){MAX_BRIGHTNESS = m;};
 
         ///////////////////////////////// HSB Colors //////////////////////////////
         void updateHSB(double h, double s, double b);
@@ -119,25 +121,15 @@ class NeoGroup {
 
         void setSaturatedColors(bool s){saturated_colors = s;};
 
-        //////////////////////////////// ColorWipes ///////////////////////////////
-        void colorWipe(uint8_t red, uint8_t green, uint8_t blue, double brightness, double bs);
-        void colorWipe(uint8_t red, uint8_t green, uint8_t blue, double brightness);
+        //////////////////////////////// ColorWipe /////////////////////////////////
+        void colorWipe(uint16_t red, uint16_t green, uint16_t blue, double brightness, double bs);
+        void colorWipe(uint16_t red, uint16_t green, uint16_t blue, double brightness);
         void colorWipeHSB(double h, double s, double b);
-        void colorWipeAdd(uint8_t red, uint8_t green, uint8_t blue);
-        void colorWipeAdd(uint8_t red, uint8_t green, uint8_t blue, double bs);
+        void colorWipeAdd(uint16_t red, uint16_t green, uint16_t blue);
+        void colorWipeAdd(uint16_t red, uint16_t green, uint16_t blue, double bs);
 
         void changeMapping(uint8_t m){mapping = m;};
 
-        //////////////////////////////// Flashes //////////////////////////////////
-        bool flashOn(uint8_t red, uint8_t green, uint8_t blue); // perhaps add time for flash to flashOn
-        bool flashOn();
-        void flashOff();
-        void update();
-
-        void setFlashColors(uint8_t red, uint8_t green, uint8_t blue);
-        void setSongColors(uint8_t red, uint8_t green, uint8_t blue);
-
-        void powerOn(); // force a power on, overriding any shdn_timer
 
         /////////////////////////////// Printing /////////////////////////////////
         void printGroupConfigs();
@@ -173,29 +165,34 @@ class NeoGroup {
 
         bool flash_dominates = false;
         uint8_t mapping = LED_MAPPING_STANDARD;
+        uint16_t flash_debounce_time = 50;
         double hsb[3]; // limited from 0 - 255
-        uint8_t rgb[3]; // limited from 0.0 - 1.0
+        uint16_t rgb[3]; // limited from 0.0 - 1.0
         double hue2rgb(double p, double q, double t);
-        void RgbToHsb(uint8_t red, uint8_t green, uint8_t blue);
+        void RgbToHsb(uint16_t red, uint16_t green, uint16_t blue);
         void HsbToRgb(double hue, double saturation, double lightness);
-        void updateColorLog(uint8_t red, uint8_t green, uint8_t blue);
+        void updateColorLog(uint16_t red, uint16_t green, uint16_t blue);
         bool extreme_lux_shdn = false;
-        uint32_t packColors(uint8_t &red, uint8_t &green, uint8_t &blue, double scaler);
+        uint32_t packColors(uint16_t red, uint16_t green, uint16_t blue, double scaler);
 
         ////////////////////////////// Flashes //////////////////////////////////
-        uint8_t flash_red = 0;
-        uint8_t flash_green = 0;
-        uint8_t flash_blue = 255;
+        uint16_t onset_red = 0;
+        uint16_t onset_green = 0;
+        uint16_t onset_blue = 255;
         // max values for the click used for some mappings
-        uint8_t song_red = 0;
-        uint8_t song_green = 0;
-        uint8_t song_blue = 0;
+        uint16_t song_red = 0;
+        uint16_t song_green = 0;
+        uint16_t song_blue = 0;
 
         long remaining_flash_delay = 0;// negative values expected, can not be a variable
         bool flash_on = false;
         long flash_min_time;  // how long is the shortest flash?
         long flash_max_time;  // how about the longest?
         elapsedMillis fpm_timer;
+
+        unsigned long num_flashes = 0;// these are public so they can be tracked by the datalog manager
+        unsigned long total_flashes = 0;
+        double fpm;
 
         // a linked neogroup for sharing flash info?
 
@@ -242,13 +239,15 @@ class NeoGroup {
         double user_bs = 1.0;
         /////////////////////// Saturated Colors ////////////////////////////
         bool saturated_colors = false;
+        float maxf(float l, float b);
+        float minf(float l, float b);
 };
 
 void NeoGroup::init() {
     leds->begin();
 }
 
-uint32_t NeoGroup::packColors(uint8_t &red, uint8_t &green, uint8_t &blue, double scaler) {
+uint32_t NeoGroup::packColors(uint16_t red, uint16_t green, uint16_t blue, double scaler) {
     /*
      * TODO write a function summary
      * 
@@ -261,18 +260,22 @@ uint32_t NeoGroup::packColors(uint8_t &red, uint8_t &green, uint8_t &blue, doubl
     dprint(p_pack_colors, green); 
     dprint(p_pack_colors, "\t");
     dprintln(p_pack_colors, blue); 
+
     if (scaler > 1.01 || scaler < 0.99) {
         double dred = (double)red * scaler;
         double dgreen = (double)green * scaler;
         double dblue =(double)blue * scaler;
 
-        dred = minf(dred, MAX_BRIGHTNESS);
-        dgreen = minf(dgreen, MAX_BRIGHTNESS);
-        dblue = minf(dblue, MAX_BRIGHTNESS);
+        double overshoot = dred + dgreen + dblue;
+        if (overshoot > MAX_BRIGHTNESS) {
+            dred = dred - (overshoot / 3);
+            dgreen = dgreen - (overshoot / 3);
+            dblue = dblue = (overshoot / 3);
+        }
 
-        red = (uint8_t)dred;
-        green = (uint8_t)dgreen;
-        blue = (uint8_t)dblue;
+        red = min((uint16_t)dred, 255);
+        green = min((uint16_t)dgreen, 255);
+        blue = min((uint16_t)dblue, 255);
 
         dprint(p_pack_colors, "After lux_bs scaling     :\t");
         dprint(p_pack_colors, red);
@@ -284,19 +287,22 @@ uint32_t NeoGroup::packColors(uint8_t &red, uint8_t &green, uint8_t &blue, doubl
 
     if (saturated_colors) {
         if (red >= green && red >= blue) {
-            red += (green*0.5 + blue*0.5);
+            red += (green / 3 + blue / 3);
             green /= 3;
             blue /= 3;
+            constrain(red, 0, 255);
         }
         else if (green >= red && green >= blue) {
-            green += (red/2 + blue/2);
+            green += (red / 3 + blue / 3);
             red /= 3;
             blue /= 3;
+            constrain(green, 0, 255);
         }
         else if (blue >= red && blue >= green) {
-            blue += (red/2 + green /2);
+            blue += (red / 3 + green / 3);
             green /= 3;
             blue /= 3;
+            constrain(blue, 0, 255);
         }
         dprint(p_pack_colors, "After saturated_colors   :\t");
         dprint(p_pack_colors, red);
@@ -323,13 +329,9 @@ uint32_t NeoGroup::packColors(uint8_t &red, uint8_t &green, uint8_t &blue, doubl
         dprint(p_pack_colors, blue); 
     }
 
-    // if (red < MIN_BRIGHTNESS) {red = MIN_BRIGHTNESS;};
-    // if (green < MIN_BRIGHTNESS) {green = MIN_BRIGHTNESS;};
-    // if (blue < MIN_BRIGHTNESS) {blue = MIN_BRIGHTNESS;};
-
     color = (red << 16) + (green << 8) + (blue);
 
-        dprint(p_pack_colors, "                         :\t");
+    dprint(p_pack_colors, "                         :\t");
     dprint(p_pack_colors, red);
     dprint(p_pack_colors, "\t");
     dprint(p_pack_colors, green); 
@@ -454,13 +456,13 @@ unsigned long NeoGroup::getShdnLen() {
     }
 }
 
-void NeoGroup::setFlashColors(uint8_t red, uint8_t green, uint8_t blue) {
-    flash_red = red;
-    flash_green = green;
-    flash_blue = blue;
+void NeoGroup::setOnsetColors(uint16_t red, uint16_t green, uint16_t blue) {
+    onset_red = red;
+    onset_green = green;
+    onset_blue = blue;
 }
 
-void NeoGroup::setSongColors(uint8_t red, uint8_t green, uint8_t blue) {
+void NeoGroup::setSongColors(uint16_t red, uint16_t green, uint16_t blue) {
     song_red = red;
     song_green = green;
     song_blue = blue;
@@ -506,7 +508,7 @@ void NeoGroup::HsbToRgb(double hue, double saturation, double lightness)
     updateColorLog(r8, g8, b8); // this is used to update the rgb[] array
 }
 
-void NeoGroup::RgbToHsb(uint8_t red, uint8_t green, uint8_t blue)
+void NeoGroup::RgbToHsb(uint16_t red, uint16_t green, uint16_t blue)
 {
     /***************************************************
       Copyright (c) 2017 Luis Llamas
@@ -562,7 +564,7 @@ void NeoGroup::colorWipeHSB(double h, double s, double b) {
     colorWipe(rgb[0], rgb[1], rgb[2], b);
 }
 
-void NeoGroup::colorWipeAdd(uint8_t red, uint8_t green, uint8_t blue, double bs) {
+void NeoGroup::colorWipeAdd(uint16_t red, uint16_t green, uint16_t blue, double bs) {
     red += rgb[0];
     red = constrain(red, 0, 255);
     green += rgb[1];
@@ -573,7 +575,7 @@ void NeoGroup::colorWipeAdd(uint8_t red, uint8_t green, uint8_t blue, double bs)
 }
 
 
-void NeoGroup::colorWipeAdd(uint8_t red, uint8_t green, uint8_t blue) {
+void NeoGroup::colorWipeAdd(uint16_t red, uint16_t green, uint16_t blue) {
     red += rgb[0];
     red = constrain(red, 0, 255);
     green += rgb[1];
@@ -583,11 +585,11 @@ void NeoGroup::colorWipeAdd(uint8_t red, uint8_t green, uint8_t blue) {
     colorWipe(red, green, blue, lux_bs);
 }
 
-void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double brightness) {
+void NeoGroup::colorWipe(uint16_t red, uint16_t green, uint16_t blue, double brightness) {
     colorWipe(red, green, blue, brightness, lux_bs);
 }
 
-void NeoGroup::updateColorLog(uint8_t red, uint8_t green, uint8_t blue) {
+void NeoGroup::updateColorLog(uint16_t red, uint16_t green, uint16_t blue) {
 
     // for each ms this value has been present add the value of the last color
     //  to the running total
@@ -617,7 +619,7 @@ void NeoGroup::updateColorLog(uint8_t red, uint8_t green, uint8_t blue) {
     }
 }
 
-void NeoGroup::setPixel(uint16_t num,uint8_t red, uint8_t green, uint8_t blue, double brightness ) {
+void NeoGroup::setPixel(uint16_t num,uint16_t red, uint16_t green, uint16_t blue, double brightness ) {
     dprintln(p_color_wipe, "Entering setPixel() in NeoGroup - ");
     leds->setPixel(num, packColors(red, green, blue, brightness));
     leds->show();
@@ -625,7 +627,7 @@ void NeoGroup::setPixel(uint16_t num,uint8_t red, uint8_t green, uint8_t blue, d
     dprintln(p_color_wipe, num); 
 }
 
-void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double brightness, double bs) {
+void NeoGroup::colorWipe(uint16_t red, uint16_t green, uint16_t blue, double brightness, double bs) {
     // TODO this logic is broken...
     // need a debug rating of at least 2 to print these
     dprintMinorDivide(p_color_wipe);
@@ -667,15 +669,15 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bright
         // if the flash is on then add the flash colors to the color wipe colors
         if (flash_dominates == false) {
             dprintln(p_color_wipe, " Flash blocked colorWipe");
-            red += flash_red;
-            green += flash_green;
-            blue += flash_blue;
+            red += onset_red;
+            green += onset_green;
+            blue += onset_blue;
         }
         else {
             dprintln(p_color_wipe, " Flash blocked colorWipe");
-            red += flash_red;
-            green += flash_green;
-            blue += flash_blue;
+            red += onset_red;
+            green += onset_green;
+            blue += onset_blue;
         }
     }
     //////////////////////////////////////////////////////////////////////////////
@@ -703,9 +705,9 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bright
         blue = blue * num_pixels;
         for (int i = 0; i < num_pixels; i++) {
             // if we have more than the max then just add the max to the target
-            uint8_t _red = 0;
-            uint8_t _green = 0;
-            uint8_t _blue = 0;
+            uint16_t _red = 0;
+            uint16_t _green = 0;
+            uint16_t _blue = 0;
             if (red > song_red) {
                 _red = song_red;
             } else {
@@ -752,9 +754,9 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bright
         //////////////////////////// CENTER RING //////////////////////////////////////////
         ///////////////////////////////////////////////////////////////////////////////////
         // temp rgb values for if we need to present a scaledd display for the center ring
-        uint8_t _red = brightness * 5 * red;
-        uint8_t _green= brightness * 5 * green;
-        uint8_t _blue = brightness * 5 * blue;
+        uint16_t _red = brightness * 5 * red;
+        uint16_t _green= brightness * 5 * green;
+        uint16_t _blue = brightness * 5 * blue;
         for (int i = 0; i < 8; i++) {
             // if the brightness is greater than 51 then all the LEDS should be 
             // at max brightness for the center rings
@@ -804,11 +806,11 @@ void NeoGroup::colorWipe(uint8_t red, uint8_t green, uint8_t blue, double bright
         // g2     5     2     7     9
         // g1        1         6  10
         int g1[3] = {1, 6, 10};
-        uint8_t g1_colors[3] = {0,0,0};
+        uint16_t g1_colors[3] = {0,0,0};
         int g2[4] = {5, 2, 7, 9};
-        uint8_t g2_colors[3] = {0,0,0};
+        uint16_t g2_colors[3] = {0,0,0};
         int g3[3] = {4, 3, 8};
-        uint8_t g3_colors[3] = {0,0,0};
+        uint16_t g3_colors[3] = {0,0,0};
         // add all the energy for each colour together
         red = red * num_pixels;
         green = green * num_pixels;
@@ -934,45 +936,45 @@ void NeoGroup::flashOff() {
     }
 }
 
-bool NeoGroup::flashOn(uint8_t red, uint8_t green, uint8_t blue) {
+bool NeoGroup::flashOn(uint16_t red, uint16_t green, uint16_t blue) {
     // if it has been uint32_t enough since the last flash occured
-    if (last_flash > FLASH_DEBOUNCE_TIME) {
-        if (red + green + blue > 0 && shdn_timer > shdn_len) {
-            // if a flash is not currently on
-            if ( (flash_on == false) || (leds_on == false) ) {
-                remaining_flash_delay = flash_min_time;
-                colorWipe(red, green, blue, lux_bs * 1.5); // has to be on first as flash_on will block the colorWipe
-                flash_on = true; // turn the light on along with the flag
-                if (leds_on != true) {
-                    dprintln(p_leds_on, "leds_on set to true");
-                    leds_on = true;
-                }
-                last_flash = 0; // reset the elapsed millis variable as the light was just turned on
-                num_flashes = num_flashes  + 1;
-                total_flashes++;
-                getFPM();
-                dprint(p_onset, id);
-                dprint(p_onset, " FLASH ON #");
-                dprint(p_onset, num_flashes);
-                dprint(p_onset, " Flashed "); dprint(p_onset, remaining_flash_delay);
-                dprint(p_onset, " FPM "); dprintln(p_onset, fpm);
-            } else { // if a flash is on then increment the remaining_flash_Delay
-                addToRemainingFlashDelay(1);
-                if (remaining_flash_delay > flash_max_time) {
-                    remaining_flash_delay = flash_max_time;
-                }
-            }
-            return true;
-        }
-    } else {
-        dprint(p_onset, "Flash skipped due to FLASH_DEBOUNCE_TIME : ");
+    if (last_flash < flash_debounce_time) {
+        dprint(p_onset, "Flash skipped due to flash_debounce_time : ");
         dprintln(p_onset, last_flash);
+        return false;
+    }
+    if (red + green + blue > 0 && shdn_timer > shdn_len) {
+        // if a flash is not currently on
+        if ( (flash_on == false) || (leds_on == false) ) {
+            remaining_flash_delay = flash_min_time;
+            colorWipe(red, green, blue, lux_bs * 1.5); // has to be on first as flash_on will block the colorWipe
+            flash_on = true; // turn the light on along with the flag
+            if (leds_on != true) {
+                dprintln(p_leds_on, "leds_on set to true");
+                leds_on = true;
+            }
+            last_flash = 0; // reset the elapsed millis variable as the light was just turned on
+            num_flashes = num_flashes  + 1;
+            total_flashes++;
+            getFPM();
+            dprint(p_onset, id);
+            dprint(p_onset, " FLASH ON #");
+            dprint(p_onset, num_flashes);
+            dprint(p_onset, " Flashed "); dprint(p_onset, remaining_flash_delay);
+            dprint(p_onset, " FPM "); dprintln(p_onset, fpm);
+        } else { // if a flash is on then increment the remaining_flash_Delay
+            addToRemainingFlashDelay(1);
+            if (remaining_flash_delay > flash_max_time) {
+                remaining_flash_delay = flash_max_time;
+            }
+        }
+        return true;
     }
     return false;
 }
 
 bool NeoGroup::flashOn() {
-    return flashOn(flash_red, flash_green, flash_blue);
+    return flashOn(onset_red, onset_green, onset_blue);
 }
 
 //////////////////////////////////////////////////////
@@ -989,7 +991,7 @@ void NeoGroup::update() {
         // if the flash is not currently on, turn the flash on
         if (flash_on == false) { //and the light is not currently on
             dprintln(p_onset, "-- Turning the Flash ON --");
-            flashOn(flash_red, flash_green, flash_blue);// flash on
+            flashOn(onset_red, onset_green, onset_blue);// flash on
         }
         // if the flash is already on subtract from the timer
         else {
@@ -1083,6 +1085,20 @@ void NeoGroup::setPrintAll(bool s) {
         p_extreme_lux = s;
         p_leds_on = s;
         p_bs = s;
+}
+
+float NeoGroup::minf(float l, float b) {
+    if (l < b){
+        return l;
+    }
+    return b;
+}
+
+float NeoGroup::maxf(float l, float b) {
+    if (l > b){
+        return l;
+    }
+    return b;
 }
 
 #endif // __LEDS_H__
