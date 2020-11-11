@@ -94,6 +94,7 @@ class NeoGroup {
 
         void setMinMaxBrightnessFromBS(double s);
         double getOnRatio() {return on_ratio;};
+        void resetOnRatio();
         double on_ratio = 0.5;
 
         void setMinBrightnessFromLux(double l);
@@ -150,7 +151,6 @@ class NeoGroup {
 
         void setExtremeLuxShdn(bool e){extreme_lux_shdn = e;};
         bool getLuxShdn() { return extreme_lux_shdn;};
-
 
     private:
         /////////////////// Printing ////////////////////
@@ -223,13 +223,13 @@ class NeoGroup {
         unsigned long last_on_ratio_update = 0;
         void updateOnRatio(int color);
 
+
         /////////////////////// Brightness Scaler ////////////////////////////
         double lux_bs = 1.0;
         ValueTrackerDouble lux_bs_tracker = ValueTrackerDouble("neom_lux_bs",&lux_bs, 1.0);
 
         double brightness_scaler_total;
         double brightness_scaler_changes;
-        void   resetOnOffRatioCounters();
 
         uint16_t MIN_BRIGHTNESS = 0;
         uint16_t MAX_BRIGHTNESS = 765;
@@ -270,7 +270,7 @@ uint32_t NeoGroup::packColors(uint16_t red, uint16_t green, uint16_t blue, doubl
         if (overshoot > MAX_BRIGHTNESS) {
             dred = dred - (overshoot / 3);
             dgreen = dgreen - (overshoot / 3);
-            dblue = dblue = (overshoot / 3);
+            dblue = dblue - (overshoot / 3);
         }
 
         red = min((uint16_t)dred, 255);
@@ -411,16 +411,16 @@ bool NeoGroup::shutdown(uint16_t len) {
         shdn_len = len;
         dprintln(p_lux, "shdn_len set to len ");
         // delay(1000);
-        shdn_timer = 0;
         dprintln(p_lux, "-- shdn_timer is reset to 0");
         // delay(1000);
         if (leds_on != false) {
             leds_on = false;
             dprint(p_leds_on || p_lux, "\nsetting leds_on to false");
+            dprintln(p_leds_on);
         }
-        dprintln(p_leds_on);
         // delay(1000);
-        dprint(p_lux, "exiting neogroup.shutdown() now");
+        dprintln(p_lux, "exiting neogroup.shutdown() now");
+        shdn_timer = 0;
         return true;
     }
     else {
@@ -630,12 +630,12 @@ void NeoGroup::setPixel(uint16_t num,uint16_t red, uint16_t green, uint16_t blue
 void NeoGroup::colorWipe(uint16_t red, uint16_t green, uint16_t blue, double brightness, double bs) {
     // TODO this logic is broken...
     // need a debug rating of at least 2 to print these
-    dprintMinorDivide(p_color_wipe);
+    // dprintMinorDivide(p_color_wipe);
     dprint(p_color_wipe, "Entering ColorWipe() in NeoGroup - ");
     dprint(p_color_wipe, id);
     dprint(p_color_wipe, " - num_pixels: ");
-    dprintln(p_color_wipe, num_pixels); 
-    dprint(p_color_wipe, "rgb: ");
+    dprint(p_color_wipe, num_pixels); 
+    dprint(p_color_wipe, " rgb: ");
     dprint(p_color_wipe, red);
     dprint(p_color_wipe, "\t");
     dprint(p_color_wipe, green);
@@ -643,7 +643,7 @@ void NeoGroup::colorWipe(uint16_t red, uint16_t green, uint16_t blue, double bri
     dprintln(p_color_wipe, blue);
 
     if (extreme_lux_shdn == true) {
-        dprintln(p_extreme_lux, " colorWipe returning due extreme lux conditions");
+        dprintln(p_extreme_lux, F(" colorWipe returning due extreme lux conditions"));
         for (int i = 0; i < num_pixels; i++) {
             leds->setPixel(idx_start + i, 0);
         }
@@ -658,8 +658,10 @@ void NeoGroup::colorWipe(uint16_t red, uint16_t green, uint16_t blue, double bri
             leds->setPixel(idx_start + i, 0);
         }
         leds_on = false;
-        dprint(p_color_wipe, " colorWipe returning due to shdn_timer : "); 
-        dprintln(p_color_wipe, shdn_timer);
+        dprint(p_color_wipe, F(" colorWipe returning due to shdn_timer being less than the shutdown length : ")); 
+        dprint(p_color_wipe, shdn_timer);
+        dprint(p_color_wipe, " < ");
+        dprintln(p_color_wipe, shdn_len);
         updateColorLog(0, 0, 0);
         return;
     }
@@ -1026,7 +1028,7 @@ void NeoGroup::resetAvgBrightnessScaler() {
     lux_bs_tracker.getAvg(true);
 }
 
-void NeoGroup::resetOnOffRatioCounters() {
+void NeoGroup::resetOnRatio() {
     on_ratio = (double)on_time / (double)(on_time + off_time);
     on_time = 0;
     off_time = 0;
@@ -1040,17 +1042,18 @@ void NeoGroup::updateOnRatio(int color) {
     bool update = false;
     if (color > 0 && !isInShutdown()) {
         on_time += on_off_len;
+        on_off_len = 0;
         off_len = 0;
         update = true;
     } else if (color <= 0){
         off_time += on_off_len;
+        on_off_len = 0;
         on_len = 0;
         update = true;
     }
 
     if (on_time > 0 && off_time > 0 && update) {
         on_ratio = (double)on_time / (double)(on_time + off_time);
-        on_off_len = 0;
     }
 
     dprint(p_on_ratio, "updated led on/off ratio "); dprint(p_on_ratio, " :\t");
