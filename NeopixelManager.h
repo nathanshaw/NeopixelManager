@@ -881,7 +881,6 @@ void NeoGroup::colorWipe(uint16_t red, uint16_t green, uint16_t blue, double bri
                 leds->setPixel(times[i][ii], red, green, blue);
             }
         }
-        Serial.println("WARNING LED_MAPPING_CLOCK_FILL is not currently implemented");
     }
     else if (mapping == LED_MAPPING_ROUND) {
         // TODO this logic is broken for when a flash is happening
@@ -985,7 +984,8 @@ void NeoGroup::colorWipe(uint16_t red, uint16_t green, uint16_t blue, double bri
         dprintln(p_color_wipe);
     }
     else if (mapping == LED_MAPPING_BOTTOM_UP) {
-        Serial.println("WARNING - this colorwipe mapping LED_MAPPING_BOTTOM_UP is not currently implemented");
+        Serial.println("WARNING - this colorwipe mapping LED_MAPPING_BOTTOM_UP is not currently implemented, changing the mapping to outside in");
+        mapping = LED_MAPPING_OUTSIDE_IN;
     }
     else {
         dprintln(p_color_wipe, F("WARNING - The mapping strategy currently selected is not implemented, colorWipe is exiting now"));
