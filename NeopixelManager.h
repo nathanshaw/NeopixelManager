@@ -873,12 +873,17 @@ void NeoGroup::colorWipe(uint16_t red, uint16_t green, uint16_t blue, double bri
             {0, 12, 17, 20, 32, 37}
         };
         // first determine the LEDs which 
-        for (int i = 0; i < 40; i++) {
-            leds->setPixel(i, 0, 0, 0);
-        }
+        // for (int i = 0; i < 40; i++) {
+        //     leds->setPixel(i, 0, 0, 0);
+        // }
         for (int i = 0; i < idx; i++){
             for (int ii = 0; ii < 6; ii++) {
                 leds->setPixel(times[i][ii], red, green, blue);
+            }
+        }
+        for (int i = idx; i < 12; i++) {
+            for (int ii = 0; ii < 6; ii++) {
+                leds->setPixel(times[i][ii], 0, 0, 0);
             }
         }
     }
