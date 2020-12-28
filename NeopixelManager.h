@@ -582,7 +582,7 @@ void NeoGroup::resetRGBAverageTracker() {
 }
 
 void NeoGroup::colorWipeHSB(double h, double s, double b) {
-    dprint(p_color_wipe, "Entering colorWipeHSB() : ");
+    // dprint(p_color_wipe, "Entering colorWipeHSB() : ");
     updateHSB(h, s, b);
     HsbToRgb(h, s, b);
     // TODO calculate brightness properly
@@ -676,16 +676,16 @@ void NeoGroup::colorWipe(uint16_t red, uint16_t green, uint16_t blue, double bri
     dprint(p_color_wipe, "Entering ColorWipe() in NeoGroup - ");
     dprint(p_color_wipe, id);
     dprint(p_color_wipe, " - num_pixels: ");
-    dprint(p_color_wipe, num_pixels); 
-    dprint(p_color_wipe, " rgb (brightness/lux bs): ");
+    dprintln(p_color_wipe, num_pixels); 
+    dprint(p_color_wipe, " rgb (brightness/lux/bs): ");
     dprint(p_color_wipe, red);
-    dprint(p_color_wipe, "/t");
+    dprint(p_color_wipe, "jt");
     dprint(p_color_wipe, green);
-    dprint(p_color_wipe, "/t");
+    dprint(p_color_wipe, "\t");
     dprint(p_color_wipe, blue);
-    dprint(p_color_wipe, "/t");
+    dprint(p_color_wipe, "\t");
     dprint(p_color_wipe, brightness);
-    dprint(p_color_wipe, "/t");
+    dprint(p_color_wipe, "\t");
     dprintln(p_color_wipe, bs);
 
     if (extreme_lux_shdn == true) {
