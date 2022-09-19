@@ -1,4 +1,4 @@
-#include <NeopixelManager.h>
+#include "../NeopixelManager.h"
 #include <WS2812Serial.h>
 
 ////////////////////////// LED MAPPING MODES ////////////////

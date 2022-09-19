@@ -21,8 +21,8 @@ uint32_t led_off_times[2] = {1, 1};
 double led_on_ratio[2];
 */
 #include <WS2812Serial.h>
-#include <PrintUtils.h>
-#include <ValueTrackerDouble.h>
+#include "../PrintUtils/PrintUtils.h"
+#include "../ValueTracker/ValueTrackerDouble.h"
 
 #ifndef UPDATE_ON_OFF_RATIOS
 #define UPDATE_ON_OFF_RATIOS 1
@@ -152,6 +152,7 @@ public:
     void colorWipe(uint16_t red, uint16_t green, uint16_t blue, double brightness, double bs);
     void colorWipe(uint16_t red, uint16_t green, uint16_t blue, double brightness);
     void colorWipeHSB(double h, double s, double b);
+    void colorWipeHSB(double h, double s, double b, double brightness);
     void colorWipeHSB(double h, double s, double b, double brightness, int start, int end);
     void colorWipeHSB(double h, double s, double b, double brightness, double bs, int start, int end);
     void colorWipeAdd(uint16_t red, uint16_t green, uint16_t blue);
@@ -652,6 +653,20 @@ void NeoGroup::colorWipeHSB(double h, double s, double b)
     // Serial.print(" - ");
     // Serial.println(rgb[2]);
     colorWipe(rgb[0], rgb[1], rgb[2], b);
+}
+
+void NeoGroup::colorWipeHSB(double h, double s, double b, double lux_bx)
+{
+    // dprint(p_color_wipe, "Entering colorWipeHSB() : ");
+    updateHSB(h, s, b);
+    HsbToRgb(h, s, b);
+    // TODO calculate brightness properly
+    // Serial.print(rgb[0]);
+    // Serial.print(" - ");
+    // Serial.print(rgb[1]);
+    // Serial.print(" - ");
+    // Serial.println(rgb[2]);
+    colorWipe(rgb[0], rgb[1], rgb[2], b * lux_bs);
 }
 
 void NeoGroup::colorWipeHSB(double h, double s, double b, double brightness, double bs, int start, int end)
