@@ -191,6 +191,8 @@ public:
     void setExtremeLuxShdn(bool e) { extreme_lux_shdn = e; };
     bool getLuxShdn() { return extreme_lux_shdn; };
 
+    bool leds_on = false;
+
 private:
     /////////////////// Printing ////////////////////
     bool p_onset = false;
@@ -265,7 +267,6 @@ private:
     int num_pixels;
     elapsedMillis shdn_timer;   // if this is below a certain threshold then shutdown everything
     unsigned long shdn_len = 0; // this needs to be a long to
-    bool leds_on = false;
     elapsedMillis last_flash; // the last time a flash message was received
     elapsedMillis on_off_len; // this is reset every time the leds shutdown or turn on (length of time on or off)
     elapsedMillis on_len;
