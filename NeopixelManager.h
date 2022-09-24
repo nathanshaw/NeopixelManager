@@ -20,10 +20,11 @@ uint32_t led_on_times[2] = {1, 1};
 uint32_t led_off_times[2] = {1, 1};
 double led_on_ratio[2];
 */
+#include <Arduino.h>
 #include <WS2812Serial.h>
 #include <WeatherManager.h>
-#include "../PrintUtils/PrintUtils.h"
-#include "../ValueTracker/ValueTrackerDouble.h"
+#include <PrintUtils.h>
+#include <ValueTrackerDouble.h>
 
 #ifndef UPDATE_ON_OFF_RATIOS
 #define UPDATE_ON_OFF_RATIOS 1
@@ -82,9 +83,8 @@ public:
     bool  activateTempOffsets(bool _h, bool _s, bool _b);
     // this function needs work - TODO should handle all offset and scaling
     // automatically, depending on the settings established by calling the above functions
-    bool applyWeatherOffsets(WeatherManager *weather_manager, bool _p = false);
-
-    // float applyWeatherOffsets(bool _p = false) {
+    void applyWeatherOffsets(WeatherManager & weather_manager, double & _hue, double & _sat, double & _bgt, bool _p);
+    void applyWeatherScaling(WeatherManager & weather_manager, double & _hue, double & _sat, double & _bgt, bool _p);
     /////////////////////////////// Datatracking /////////////////////////////
     double red_avg, green_avg, blue_avg;
     double getAverageBrightness(bool reset); // can reset the trackers if neededd
@@ -1450,16 +1450,24 @@ float NeoGroup::maxf(float l, float b)
     return b;
 }
 
-// TODO - okay, this function should be in the NeoPixelManager
-bool NeoGroup::applyWeatherOffsets(WeatherManager *weather_manager, bool _p = false) {
-    // TODO - this is a farse, _hue used to be passed into the function
-    // when called
-    float _hue = 0.0;
 
+// TODO - okay, this function should be in the NeoPixelManager
+void NeoGroup::applyWeatherOffsets(WeatherManager & weather_manager, double & _hue, double & _sat, double & _bgt, bool _p){
+  /// @brief use readings from a weather manager to offset the HSB values for 
+  // the visual feedback system
+  /// @param weather_manager reference to a WeatherManager object, whose readings scale the HSB values
+  /// @param _hue reference to a hue value betweeen 0.0 and 1.0
+  /// @param _sat reference to a sat value betweeen 0.0 and 1.0
+  /// @param _bgt reference to a brightness value betweeen 0.0 and 1.0
+  /// @param _p  if set to true, the function will print troubleshooting data
   if (HUMID_OFFSETS_FEEDBACK && HUMID_OFFSETS_HUE){
     // constrain value to ensure proper scaling
-    float h = constrain(weather_manager->getHumidity(), HUMID_OFFSET_MIN_VAL, HUMID_OFFSET_MAX_VAL);
-    float h_offset = map(h, HUMID_OFFSET_MIN_VAL, HUMID_OFFSET_MAX_VAL, MIN_HUMID_OFFSET, MAX_HUMID_OFFSET);
+    // the humidity value returned is from 0.0 to 100.0
+    float h = constrain(weather_manager.getHumidity()/100, HUMID_OFFSET_MIN_VAL, HUMID_OFFSET_MAX_VAL);
+    dprint(_p, "current humidity is : ");
+    dprint(_p, h);
+    // calaculate the offset based on the values in Configuration.h
+    float h_offset = mapf(h, HUMID_OFFSET_MIN_VAL, HUMID_OFFSET_MAX_VAL, MIN_HUMID_OFFSET, MAX_HUMID_OFFSET);
     if (HUMID_FEEDBACK_SCALING == EXP_SCALING) {
       if (h_offset > 0) {
         h_offset = h_offset * h_offset;
@@ -1468,54 +1476,148 @@ bool NeoGroup::applyWeatherOffsets(WeatherManager *weather_manager, bool _p = fa
         h_offset = h_offset * h_offset * -1;
       }
     }
+    dprint(_p, "\toffseting hue by ");
+    dprintln(_p, h_offset);
     _hue += h_offset;
-  }
-  if (HUMID_SCALES_FEEDBACK && HUMID_SCALES_HUE) {
-    // to ensure there is not more scaling than intended we constrain
-    float h = (weather_manager->getHumidity());
-    //, HUMID_OFFSET_MIN_VAL, HUMID_OFFSET_MAX_VAL);
-    dprint(_p, "current humidity is : ");
-    dprintln(h);
-    h = mapf(weather_manager->getHumidity(), 0.0, 100.0, HUMID_OFFSET_MIN_VAL, HUMID_OFFSET_MAX_VAL);
-    dprint(_p, "after mapping humidity is : ");
-    dprintln(h);
-    // this is assuming that our values for these macros will not
-    // produce anything below 0.0 or above 1.0
-    float c_min = HUMID_SCALE_CENTER - (1 - (HUMID_SCALE_AMOUNT * 0.5));
-    float c_max = HUMID_SCALE_CENTER + (1 - (HUMID_SCALE_AMOUNT * 0.5));
-    _hue = map(_hue, 0.0, 1.0, c_min, c_max);
   }
   if (TEMP_OFFSETS_FEEDBACK && TEMP_OFFSETS_HUE) {
     // constrain value to ensure proper scaling
-    float t = constrain(weather_manager->getTemperature(), TEMP_OFFSET_MIN_VAL, TEMP_OFFSET_MAX_VAL);
-    float t_offset = map(t, TEMP_OFFSET_MIN_VAL, TEMP_OFFSET_MAX_VAL, MIN_TEMP_OFFSET, MAX_TEMP_OFFSET);
+    // the temp value returned is from -40.0 to 120.0
+    float t = constrain(weather_manager.getTemperature()/100, TEMP_OFFSET_MIN_VAL, TEMP_OFFSET_MAX_VAL);
+    dprint(_p, "current temperature is : ");
+    dprint(_p, t);
+    float t_offset = mapf(t, TEMP_OFFSET_MIN_VAL, TEMP_OFFSET_MAX_VAL, MIN_TEMP_OFFSET, MAX_TEMP_OFFSET);
     if (TEMP_FEEDBACK_SCALING == EXP_SCALING) {
       if (t_offset > 0) {
         t_offset = t_offset * t_offset;
-      }else {
+      } else {
         // to maintain the negative sign
         t_offset = t_offset * t_offset * -1;
       }
     }
     _hue += t_offset;
+    dprint(_p, "\toffsetting hue by ");
+    dprintln(_p, t_offset);
+  }
+  if (TEMP_OFFSETS_FEEDBACK && TEMP_OFFSETS_SAT) {
+    // constrain value to ensure proper scaling
+    float t = constrain(weather_manager.getTemperature()/100, HUMID_OFFSET_MIN_VAL, HUMID_OFFSET_MAX_VAL);
+    dprint(_p, "current humidity is : ");
+    dprint(_p, t);
+    float s_offset = mapf(t, HUMID_OFFSET_MIN_VAL, HUMID_OFFSET_MAX_VAL, MIN_HUMID_OFFSET, MAX_HUMID_OFFSET);
+    if (HUMID_FEEDBACK_SCALING == EXP_SCALING) {
+      if (s_offset > 0) {
+        s_offset = s_offset * s_offset;
+      }else {
+        // to maintain the negative sign
+        s_offset = s_offset * s_offset * -1;
+      }
+    }
+    _sat += s_offset;
+    dprint(_p, "\toffsetting sat by ");
+    dprintln(_p, s_offset);
+  }
+  if (HUMID_OFFSETS_FEEDBACK && HUMID_OFFSETS_SAT) {
+    // constrain value to ensure proper scaling
+    float h = constrain(weather_manager.getHumidity()/100, HUMID_OFFSET_MIN_VAL, HUMID_OFFSET_MAX_VAL);
+    dprint(_p, "current humidity is : ");
+    dprint(_p, h);
+    float s_offset = mapf(h, HUMID_OFFSET_MIN_VAL, HUMID_OFFSET_MAX_VAL, MIN_HUMID_OFFSET, MAX_HUMID_OFFSET);
+    if (HUMID_FEEDBACK_SCALING == EXP_SCALING) {
+      if (s_offset > 0) {
+        s_offset = s_offset * s_offset;
+      }else {
+        // to maintain the negative sign
+        s_offset = s_offset * s_offset * -1;
+      }
+    }
+    _sat += s_offset;
+    dprint(_p, "\toffsetting sat by ");
+    dprintln(_p, s_offset);
+  }
+  if (TEMP_OFFSETS_FEEDBACK && TEMP_OFFSETS_BGT) {
+    // constrain value to ensure proper scaling
+    float t = constrain(weather_manager.getTemperature()/100, HUMID_OFFSET_MIN_VAL, HUMID_OFFSET_MAX_VAL);
+    dprint(_p, "current temperature is : ");
+    dprint(_p, t);
+    float b_offset = mapf(t, HUMID_OFFSET_MIN_VAL, HUMID_OFFSET_MAX_VAL, MIN_HUMID_OFFSET, MAX_HUMID_OFFSET);
+    if (HUMID_FEEDBACK_SCALING == EXP_SCALING) {
+      if (b_offset > 0) {
+        b_offset = b_offset * b_offset;
+      }else {
+        // to maintain the negative sign
+        b_offset = b_offset * b_offset * -1;
+      }
+    }
+    _bgt += b_offset;
+    dprint(_p, "\toffsetting brightness by ");
+    dprintln(_p, b_offset);
+  }
+  if (HUMID_OFFSETS_FEEDBACK && HUMID_OFFSETS_BGT) {
+    // constrain value to ensure proper scaling
+    float h = constrain(weather_manager.getHumidity()/100, HUMID_OFFSET_MIN_VAL, HUMID_OFFSET_MAX_VAL);
+    dprint(_p, "current humidity is : ");
+    dprint(_p, h);
+    float b_offset = mapf(h, HUMID_OFFSET_MIN_VAL, HUMID_OFFSET_MAX_VAL, MAX_HUMID_OFFSET, MIN_HUMID_OFFSET);
+    if (HUMID_FEEDBACK_SCALING == EXP_SCALING) {
+      if (b_offset > 0) {
+        b_offset = b_offset * b_offset;
+      }else {
+        // to maintain the negative sign
+        b_offset = b_offset * b_offset * -1;
+      }
+    }
+    _bgt += b_offset;
+    dprint(_p, "current bgt offset is ");
+    dprintln(_p, b_offset);
+  }
+  _hue = wrapValues(_hue);
+  _sat = wrapValues(_sat);
+  _bgt = constrain(_bgt, 0.0, 1.0);
+}
+
+void NeoGroup::applyWeatherScaling(WeatherManager & weather_manager, double & _hue, double & _sat, double & _bgt, bool _p){
+  /// @brief  WARNING - THIS FUNCTION IS NOT COMPLETE, PLEASE USE applyWeatherScaling() instead =)
+  /// @param weather_manager 
+  /// @param _hue reference to a hue value betweeen 0.0 and 1.0
+  /// @param _sat reference to a sat value betweeen 0.0 and 1.0
+  /// @param _bgt reference to a brightness value betweeen 0.0 and 1.0
+  /// @param _p  if set to true, the function will print troubleshooting data
+  if (HUMID_SCALES_FEEDBACK && HUMID_SCALES_HUE) {
+    // to ensure there is not more scaling than intended we constrain
+    float h = (weather_manager.getHumidity());
+    //, HUMID_OFFSET_MIN_VAL, HUMID_OFFSET_MAX_VAL);
+    dprint(_p, "current humidity is : ");
+    dprint(_p, h/100);
+    h = mapf(weather_manager.getHumidity(), 0.0, 100.0, HUMID_SCALE_MIN_THRESH, HUMID_SCALE_MAX_THRESH);
+    // this is assuming that our values for these macros will not
+    // produce anything below 0.0 or above 1.0
+    float c_min = HUMID_SCALE_CENTER - (1 - (HUMID_SCALE_AMOUNT * 0.5));
+    float c_max = HUMID_SCALE_CENTER + (1 - (HUMID_SCALE_AMOUNT * 0.5));
+    _hue = map(_hue, 0.0, 1.0, c_min, c_max);
+    dprint(_p, " current hue is ");
+    dprintln(_p, _hue);
   }
   if (TEMP_SCALES_FEEDBACK && TEMP_SCALES_HUE) {
   // to ensure there is not more scaling than intended we constrain
   // TODO - temp is not doing anything here?
-    float t = constrain(weather_manager->getTemperature(), TEMP_OFFSET_MIN_VAL, TEMP_OFFSET_MAX_VAL);
+    float t = weather_manager.getTemperature();
+    dprint(_p, "current temp is : ");
+    dprint(_p, t/100);
+    t = constrain(t, TEMP_OFFSET_MIN_VAL, TEMP_OFFSET_MAX_VAL);
     // this is assuming that our values for these macros will not
     // produce anything below 0.0 or above 1.0
     float t_min = TEMP_SCALE_CENTER - (1 - (TEMP_SCALE_AMOUNT * 0.5));
     float t_max = TEMP_SCALE_CENTER + (1 - (TEMP_SCALE_AMOUNT * 0.5));
     _hue = map(_hue, 0.0, 1.0, t_min, t_max);
+    dprint(_p, " current hue is ");
+    dprintln(_p, _hue);
   }
-  if (_hue > 1.0){
-    _hue -= 1.0;
-  } else if (_hue < 0.0) {
-    _hue += 1.0;
-  }
-  return _hue;
+  _hue = wrapValues(_hue);
+  _sat = wrapValues(_sat);
+  _bgt = constrain(_bgt, 0.0, 1.0);
 }
+
 
 bool  NeoGroup::activateHumidScaling(bool _h, bool _s, bool _b){
     humid_scales[0] = _h;
